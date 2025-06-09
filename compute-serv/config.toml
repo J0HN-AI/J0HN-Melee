@@ -1,0 +1,45 @@
+[hardware-config]
+use_cuda = true
+n_gpus = 2
+
+[network-config]
+HPC_ip = "172.16.1.36"
+HPC_port = 8888
+backup_NAS_smb = "smb://"
+test_ping = true
+DDP_ip = "127.0.0.1"
+DDP_port = "3241"
+router_port = 5555
+envs_base_port = 5000
+
+[training-config]
+n_epochs = 40
+batch_size = 1024
+world_size = 24
+learn_steps = 30
+n_games = 50
+n_projectiles = 3
+
+[agent]
+gamma = 0.999  
+actor_lr = 0.0003
+critic_lr = 0.0003
+gae = 0.95
+policy_clip = 0.2
+
+
+[instances]
+
+[instances.0]
+ip = "172.16.1.37"
+stage = "FINAL_DESTINATION"
+ai_character = "MARIO"
+cpu_character = "LUIGI"
+cpu_level = 1
+
+ai_character_change_rate = 0 # Changes character every x games (0 for no change)
+cpu_character_change_rate = 0 # Same as AI
+
+auto_characters = true
+cpu_level_progression = false
+cpu_level_progression_rate = [0.6, 10] # Changes cpu level if the award x was reached y times in a row

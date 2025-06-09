@@ -1,0 +1,5 @@
+.vscode
+compute-serv/testing
+vps/testing
+compute-serv/__pycache__
+vps/__pycache__
