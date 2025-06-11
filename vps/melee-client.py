@@ -87,9 +87,11 @@ def send_infos(socket: socket.socket, ppo_position, cpu_position, blastzones, ed
     info_payload = struct.pack("fffffffffffffffffffff", *ppo_position, *cpu_position, *blastzones, *edge, *edge_ground, *right_platform, *left_platform, *top_platform)
     socket.send(info_payload[:84])
 
-def send_observation(payload_char:str, payload_size:int, projectiles:list, blastzones, socket:socket.socket, gamestate: melee.GameState):
+def send_observation(payload_char:str, payload_size:int, projectiles:list, blastzones, socket:socket.socket, gamestate:melee.GameState, done:bool):
     payload = struct.pack(payload_char, 
                         gamestate.frame,
+                        done,
+
                         float(clamp(gamestate.players[1].position.x, blastzones[0], blastzones[1])),
                         float(clamp(gamestate.players[1].position.y, blastzones[3], blastzones[2])),
                         float(clamp(gamestate.players[melee_match.cpuController.port].position.x, blastzones[0], blastzones[1])),
@@ -203,7 +205,7 @@ def actions_2_console(actions: tuple, controller:melee.Controller):
     controller._write(command)
     controller.flush()
 
-def get_action(socket: socket.socket):
+def get_actions(socket: socket.socket):
     action_payload_char = "i???????????ffffff"
     action_payload_size = struct.calcsize(action_payload_char)
 
@@ -220,7 +222,9 @@ def process_actions(actions: tuple, melee_match:MeleeInstance.Melee):
         melee_match.pause()
     elif options == 2:
         melee_match.resume()
-
+    elif 3:
+        melee_match.reset()
+    
 def game_loop(melee_match: MeleeInstance.Melee, socket: socket.socket):
     stage, ppo_character, cpu_character, cpu_level, n_projectiles = get_match_settings(socket, melee_match)
 
@@ -228,29 +232,34 @@ def game_loop(melee_match: MeleeInstance.Melee, socket: socket.socket):
 
     send_infos(socket, ppo_position, cpu_position, blastzones, edge, edge_ground, right_platform, left_platform, top_platform)
 
-    observation_payload_char = "iffffiiff??ii??iiii??hhhhhhhh??ffffffff??ffffffffffffffffh" + "ffffhhhh"*n_projectiles
+    observation_payload_char = "l?ffffiiff??ii??iiii??hhhhhhhh??ffffffff??ffffffffffffffffh" + "ffffhhhh"*n_projectiles
     observation_payload_size = struct.calcsize(observation_payload_char)
 
     while True:
         gamestate = melee_match.console.step()
+        if gamestate.menu_state == melee.Menu.POSTGAME_SCORES:
+            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, socket, gamestate, True)
+            break
+
         if gamestate.menu_state in [melee.Menu.IN_GAME, melee.Menu.SUDDEN_DEATH]:
             projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
-            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, socket, gamestate)
+            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, socket, gamestate, False)
 
-            actions = get_action(socket)
+            actions = get_actions(socket)
+            process_actions(actions, melee_match)
+            if actions[0] == 3:
+                break
 
-            
+if __name__ == "__main__":
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connect(sock, "172.16.1.32", 8888)
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    melee_match = MeleeInstance.Melee(1, 2, "/home/jul/Desktop/SSBM.iso", ".config/Slippi\ Launcher/netplay-beta/squashfs-root/usr/bin", False)
 
-melee_match = MeleeInstance.Melee(1, 2, "/home/jul/Desktop/SSBM.iso", ".config/Slippi\ Launcher/netplay-beta/squashfs-root/usr/bin", False)
-
-connect(s, "127.0.0.1", 8888)
-
-while True:
-    try:
-        pass
-    except KeyboardInterrupt:
-        melee_match.console.stop()
-        s.close()
-        break
+    while True:
+        try:
+            game_loop(melee_match, sock)
+        except KeyboardInterrupt:
+            melee_match.console.stop()
+            sock.close()
+            break
