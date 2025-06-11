@@ -3,7 +3,7 @@ use_cuda = true
 n_gpus = 2
 
 [network-config]
-HPC_ip = "172.16.1.36"
+HPC_ip = "172.16.1.32"
 HPC_port = 8888
 backup_NAS_smb = "smb://"
 test_ping = true
@@ -31,7 +31,7 @@ policy_clip = 0.2
 [instances]
 
 [instances.0]
-ip = "172.16.1.37"
+ip = "172.16.1.120"
 stage = "FINAL_DESTINATION"
 ai_character = "MARIO"
 cpu_character = "LUIGI"
