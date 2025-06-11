@@ -7,76 +7,9 @@ import socket
 import struct
 import tomli
 
-def get_stage(stage):
-        match stage:
-            case "BATTLEFIELD":
-                return 0x0
-            case "FINAL_DESTINATION":
-                return 0x1
-            case "DREAMLAND":
-                return 0x2
-            case "FOUNTAIN_OF_DREAMS":
-                return 0x3
-            case "POKEMON_STADIUM":
-                return 0x4
-            case "YOSHIS_STORY":
-                return 0x5
-    
-def get_player(hex_player):
-        match hex_player:
-            case "DOC":
-                return 0x00
-            case "MARIO":
-                return 0x01
-            case "LUIGI":
-                return 0x02
-            case "BOWSER":
-                return 0x03
-            case "PEACH":
-                return 0x04
-            case "YOSHI":
-                return 0x05
-            case "DK":
-                return 0x06
-            case "CPTFALCON":
-                return 0x07
-            case "GANONDORF":
-                return 0x08
-            case "FALCO":
-                return 0x09
-            case "FOX":
-                return 0x0a
-            case "NESS":
-                return 0x0b
-            case "POPO":
-                return 0x0c
-            case "KIRBY":
-                return 0x0d
-            case "SAMUS":
-                return 0x0e
-            case "ZELDA":
-                return 0x0f
-            case "LINK":
-                return 0x10
-            case "YLINK":
-                return 0x11
-            case "PICHU":
-                return 0x12
-            case "PIKACHU":
-                return 0x13
-            case "JIGGLYPUFF":
-                return 0x14
-            case "MEWTWO":
-                return 0x15
-            case "GAMEANDWATCH":
-                return 0x16
-            case "MARTH":
-                return 0x17
-            case "ROY":
-                return 0x18
 
 def client_2_loopback_router(loopback_socket:socket.socket, client_socket:socket.socket, stop:th.Event, n_projectiles:int):
-    payload_char = "l?ffffiiff??ii??iiii??hhhhhhhh??ffffffff??ffffffffffffffffh" + "ffffhhhh"*n_projectiles
+    payload_char = "l?ffffiiff??ii??iiii??iiiiiiii??ffffffff??ffffffffffffffffi" + "ffffiiii"*n_projectiles
     payload_size = struct.calcsize(payload_char)
 
     while not stop.is_set():
@@ -84,8 +17,8 @@ def client_2_loopback_router(loopback_socket:socket.socket, client_socket:socket
         loopback_socket.send(payload)
     client_socket.close()
 
-def loopback_2_client_router(loopback_socket:socket.socket, client_socket:socket.socket, stop:th.Event, n_projectiles:int):
-    payload_char = "i???????????ffffff"
+def loopback_2_client_router(loopback_socket:socket.socket, client_socket:socket.socket, stop:th.Event):
+    payload_char = "iiiiiiiiiiffffff"
     payload_size = struct.calcsize(payload_char)
     
     while not stop.is_set():
@@ -123,7 +56,7 @@ def setup_loopback_connections(loopback_int_socket: socket.socket, routing_table
         loopback_spinner.succeed("All instances loopback connected ~(^-^)~")
     except KeyboardInterrupt:
             loopback_spinner.fail(f"Only {loopback_instances_connected} loopback instance/s are connected (╯°□°）╯︵ ┻━┻")
-
+    
     return socket_table
 
 def setup_client_int(network_config:dict, nb_instances:int):
@@ -142,7 +75,7 @@ def setup_client_connections(client_int_socket:socket.socket, socket_table:dict,
         while clients_instances_connected != nb_instances:
             client, addr = client_int_socket.accept()
             th.Thread(target=client_2_loopback_router, args=(socket_table.get(addr[0]), client, stop_routers, nb_projectiles)).start()
-            th.Thread(target=loopback_2_client_router, args=(socket_table.get(addr[0]), client, stop_routers, nb_projectiles)).start()
+            th.Thread(target=loopback_2_client_router, args=(socket_table.get(addr[0]), client, stop_routers)).start()
 
             clients_instances_connected += 1
             clients_spinner.text = f"Waiting for client instances {clients_instances_connected}/{nb_instances}"
@@ -168,14 +101,15 @@ if __name__ == "__main__":
 
     loopback_int_socket = setup_loopback_int(network_config, nb_instances)
     socket_table = setup_loopback_connections(loopback_int_socket, routing_table, nb_instances)
-
+    
     client_int_socket = setup_client_int(network_config, nb_instances)
     setup_client_connections(client_int_socket, socket_table, stop_routers, nb_projectiles, nb_instances)
+    
 
     try:
         print("Router Test is UP")
         while True:
-            ()
+            pass
     except KeyboardInterrupt:
         stop_routers.set()
         client_int_socket.close()
