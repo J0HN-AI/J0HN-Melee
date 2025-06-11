@@ -5,6 +5,8 @@ import melee
 import math
 from halo import Halo
 
+melee.ProjectileType.ARROW.value
+
 class tcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -19,9 +21,9 @@ class tcolors:
 def clamp(nb, nb_min, nb_max):
     return max(min(nb_max, nb), nb_min)
 
-def connect(socket: socket.socket, host:str, port:int):
+def connect(sock: socket.socket, host:str, port:int):
     try:
-        socket.connect((host, port))
+        sock.connect((host, port))
     except socket.error:
         print(f"{tcolors.BOLD}{tcolors.FAIL}Brain not found{tcolors.ENDC}")
         exit(-1)
@@ -41,7 +43,7 @@ def get_projectiles(gamestate: melee.GameState, n_projectiles: int, blastzones):
                                   projectile.speed.x,
                                   projectile.speed.y,
                                   projectile.owner,
-                                  projectile.type,
+                                  projectile.type.value,
                                   projectile.frame,
                                   projectile.subtype]
             
@@ -64,17 +66,17 @@ def get_projectiles(gamestate: melee.GameState, n_projectiles: int, blastzones):
     
     return [len(gamestate.projectiles)] + reach_projectiles
 
-def ping(socket: socket.socket, payload_size: int):
+def ping(sock: socket.socket, payload_size: int):
     while True:
-        if socket.recv(payload_size):
+        if sock.recv(payload_size):
             break
-    socket.send(b'\0' * payload_size)
+    sock.send(b'\0' * payload_size)
 
-def get_match_settings(socket: socket.socket, melee: MeleeInstance.Melee):
+def get_match_settings(sock: socket.socket, melee: MeleeInstance.Melee):
     settings_spinner = Halo(text='Waiting for match settings', spinner='dots')
     settings_spinner.start()
     while True:
-        payload = socket.recv(10)
+        payload = sock.recv(10)
         if payload:
             settings_spinner.succeed()
             settings_spinner.stop()
@@ -83,13 +85,13 @@ def get_match_settings(socket: socket.socket, melee: MeleeInstance.Melee):
                    +f"level {tcolors.BOLD}{cpu_level}{tcolors.ENDC} on stage {tcolors.OKBLUE}{melee.get_stage(stage).name}{tcolors.ENDC}")
             return stage, ppo_character, cpu_character, cpu_level, n_projectiles
 
-def send_infos(socket: socket.socket, ppo_position, cpu_position, blastzones, edge, edge_ground, right_platform, left_platform, top_platform):
+def send_infos(sock: socket.socket, ppo_position, cpu_position, blastzones, edge, edge_ground, right_platform, left_platform, top_platform):
     info_payload = struct.pack("fffffffffffffffffffff", *ppo_position, *cpu_position, *blastzones, *edge, *edge_ground, *right_platform, *left_platform, *top_platform)
-    socket.send(info_payload[:84])
+    sock.send(info_payload[:84])
 
-def send_observation(payload_char:str, payload_size:int, projectiles:list, blastzones, socket:socket.socket, gamestate:melee.GameState, done:bool):
+def send_observation(payload_char:str, payload_size:int, projectiles:list, blastzones, sock:socket.socket, gamestate:melee.GameState, done:bool):
     payload = struct.pack(payload_char, 
-                        gamestate.frame,
+                        int(gamestate.frame),
                         done,
 
                         float(clamp(gamestate.players[1].position.x, blastzones[0], blastzones[1])),
@@ -97,90 +99,90 @@ def send_observation(payload_char:str, payload_size:int, projectiles:list, blast
                         float(clamp(gamestate.players[melee_match.cpuController.port].position.x, blastzones[0], blastzones[1])),
                         float(clamp(gamestate.players[melee_match.cpuController.port].position.y, blastzones[3], blastzones[2])),
                                       
-                        gamestate.players[1].percent,
-                        gamestate.players[melee_match.cpuController.port].percent,
+                        int(gamestate.players[1].percent),
+                        int(gamestate.players[melee_match.cpuController.port].percent),
                           
-                        gamestate.players[1].shield_strength,
-                        gamestate.players[melee_match.cpuController.port].shield_strength,
+                        float(gamestate.players[1].shield_strength),
+                        float(gamestate.players[melee_match.cpuController.port].shield_strength),
                                       
-                        gamestate.players[1].is_powershield,
-                        gamestate.players[melee_match.cpuController.port].is_powershield,
+                        bool(gamestate.players[1].is_powershield),
+                        bool(gamestate.players[melee_match.cpuController.port].is_powershield),
                                       
-                        gamestate.players[1].stock,
-                        gamestate.players[melee_match.cpuController.port].stock,
+                        int(gamestate.players[1].stock),
+                        int(gamestate.players[melee_match.cpuController.port].stock),
                                       
-                        gamestate.players[1].facing,
-                        gamestate.players[melee_match.cpuController.port].facing,
+                        bool(gamestate.players[1].facing),
+                        bool(gamestate.players[melee_match.cpuController.port].facing),
                                       
-                        gamestate.players[1].action_frame,
-                        gamestate.players[melee_match.cpuController.port].action_frame,
+                        int(gamestate.players[1].action_frame),
+                        int(gamestate.players[melee_match.cpuController.port].action_frame),
 
-                        gamestate.players[1].action.value,
-                        gamestate.players[melee_match.cpuController.port].action.value,
+                        int(gamestate.players[1].action.value),
+                        int(gamestate.players[melee_match.cpuController.port].action.value),
                             
-                        gamestate.players[1].invulnerable,
-                        gamestate.players[melee_match.cpuController.port].invulnerable,
+                        bool(gamestate.players[1].invulnerable),
+                        bool(gamestate.players[melee_match.cpuController.port].invulnerable),
                                     
-                        gamestate.players[1].invulnerability_left,
-                        gamestate.players[melee_match.cpuController.port].invulnerability_left,
+                        int(gamestate.players[1].invulnerability_left),
+                        int(gamestate.players[melee_match.cpuController.port].invulnerability_left),
                                     
-                        gamestate.players[1].hitlag_left,
-                        gamestate.players[melee_match.cpuController.port].hitlag_left,
+                        int(gamestate.players[1].hitlag_left),
+                        int(gamestate.players[melee_match.cpuController.port].hitlag_left),
                                     
-                        gamestate.players[1].hitstun_frames_left,
-                        gamestate.players[melee_match.cpuController.port].hitstun_frames_left,
+                        int(gamestate.players[1].hitstun_frames_left),
+                        int(gamestate.players[melee_match.cpuController.port].hitstun_frames_left),
                                     
-                        gamestate.players[1].jumps_left,
-                        gamestate.players[melee_match.cpuController.port].jumps_left,
+                        int(gamestate.players[1].jumps_left),
+                        int(gamestate.players[melee_match.cpuController.port].jumps_left),
                                     
-                        gamestate.players[1].on_ground,
-                        gamestate.players[melee_match.cpuController.port].on_ground,
+                        bool(gamestate.players[1].on_ground),
+                        bool(gamestate.players[melee_match.cpuController.port].on_ground),
                                     
-                        gamestate.players[1].speed_air_x_self,
-                        gamestate.players[melee_match.cpuController.port].speed_air_x_self,
+                        float(gamestate.players[1].speed_air_x_self),
+                        float(gamestate.players[melee_match.cpuController.port].speed_air_x_self),
                                     
-                        gamestate.players[1].speed_y_self,
-                        gamestate.players[melee_match.cpuController.port].speed_y_self,
+                        float(gamestate.players[1].speed_y_self),
+                        float(gamestate.players[melee_match.cpuController.port].speed_y_self),
                                     
-                        gamestate.players[1].speed_x_attack,
-                        gamestate.players[melee_match.cpuController.port].speed_x_attack,
+                        float(gamestate.players[1].speed_x_attack),
+                        float(gamestate.players[melee_match.cpuController.port].speed_x_attack),
                                     
-                        gamestate.players[1].speed_y_attack,
-                        gamestate.players[melee_match.cpuController.port].speed_y_attack,
+                        float(gamestate.players[1].speed_y_attack),
+                        float(gamestate.players[melee_match.cpuController.port].speed_y_attack),
                                     
-                        gamestate.players[1].moonwalkwarning,
-                        gamestate.players[melee_match.cpuController.port].moonwalkwarning,
+                        bool(gamestate.players[1].moonwalkwarning),
+                        bool(gamestate.players[melee_match.cpuController.port].moonwalkwarning),
                                     
-                        gamestate.players[1].ecb.top.x,
-                        gamestate.players[melee_match.cpuController.port].ecb.top.x,
+                        float(gamestate.players[1].ecb.top.x),
+                        float(gamestate.players[melee_match.cpuController.port].ecb.top.x),
                                     
-                        gamestate.players[1].ecb.top.y,
-                        gamestate.players[melee_match.cpuController.port].ecb.top.y,
+                        float(gamestate.players[1].ecb.top.y),
+                        float(gamestate.players[melee_match.cpuController.port].ecb.top.y),
                                     
-                        gamestate.players[1].ecb.bottom.x,
-                        gamestate.players[melee_match.cpuController.port].ecb.bottom.x,
+                        float(gamestate.players[1].ecb.bottom.x),
+                        float(gamestate.players[melee_match.cpuController.port].ecb.bottom.x),
                                     
-                        gamestate.players[1].ecb.bottom.y,
-                        gamestate.players[melee_match.cpuController.port].ecb.bottom.y,
+                        float(gamestate.players[1].ecb.bottom.y),
+                        float(gamestate.players[melee_match.cpuController.port].ecb.bottom.y),
                                     
-                        gamestate.players[1].ecb.left.x,
-                        gamestate.players[melee_match.cpuController.port].ecb.left.x,
+                        float(gamestate.players[1].ecb.left.x),
+                        float(gamestate.players[melee_match.cpuController.port].ecb.left.x),
                                     
-                        gamestate.players[1].ecb.left.y,
-                        gamestate.players[melee_match.cpuController.port].ecb.left.y,
+                        float(gamestate.players[1].ecb.left.y),
+                        float(gamestate.players[melee_match.cpuController.port].ecb.left.y),
                                     
-                        gamestate.players[1].ecb.right.x,
-                        gamestate.players[melee_match.cpuController.port].ecb.right.x,
+                        float(gamestate.players[1].ecb.right.x),
+                        float(gamestate.players[melee_match.cpuController.port].ecb.right.x),
                                     
-                        gamestate.players[1].ecb.right.y,
-                        gamestate.players[melee_match.cpuController.port].ecb.right.y,
+                        float(gamestate.players[1].ecb.right.y),
+                        float(gamestate.players[melee_match.cpuController.port].ecb.right.y),
                                     
                         *projectiles)
-            
-    socket.send(payload[:payload_size])
+    
+    sock.send(payload[:payload_size])
 
-def controller_bool_2_dolphin(btn_state: bool):
-    if btn_state:
+def controller_bool_2_dolphin(btn_state: int):
+    if btn_state == 1:
         return "PRESS"
     else:
         return "RELEASE"
@@ -191,26 +193,29 @@ def actions_2_console(actions: tuple, controller:melee.Controller):
     command += f"{controller_bool_2_dolphin(actions[3])} X" + "\n"
     command += f"{controller_bool_2_dolphin(actions[4])} Y" + "\n"
     command += f"{controller_bool_2_dolphin(actions[5])} Z" + "\n"
-    command += f"{controller_bool_2_dolphin(actions[6])} L" + "\n"
-    command += f"{controller_bool_2_dolphin(actions[7])} R" + "\n"
-    command += f"{controller_bool_2_dolphin(actions[8])} D_UP" + "\n"
-    command += f"{controller_bool_2_dolphin(actions[9])} D_DOWN" + "\n"
-    command += f"{controller_bool_2_dolphin(actions[10])} D_LEFT" + "\n"
-    command += f"{controller_bool_2_dolphin(actions[11])} D_RIGHT" + "\n"
-    command += f"SET MAIN {actions[12]} {actions[13]}"
-    command += f"SET C {actions[14]} {actions[15]}"
-    command += f"SET L {actions[16]}"
-    command += f"SET R {actions[17]}"
+    command += f"{controller_bool_2_dolphin(int(actions[14]))} L" + "\n"
+    command += f"{controller_bool_2_dolphin(int(actions[15]))} R" + "\n"
+    command += f"{controller_bool_2_dolphin(actions[6])} D_UP" + "\n"
+    command += f"{controller_bool_2_dolphin(actions[7])} D_DOWN" + "\n"
+    command += f"{controller_bool_2_dolphin(actions[8])} D_LEFT" + "\n"
+    command += f"{controller_bool_2_dolphin(actions[9])} D_RIGHT" + "\n"
+    command += f"SET MAIN {actions[10]} {actions[11]}" + "\n"
+    command += f"SET C {actions[12]} {actions[13]}" + "\n"
+    command += f"SET L {actions[14]}" + "\n"
+    command += f"SET R {actions[15]}" + "\n"
 
     controller._write(command)
     controller.flush()
 
-def get_actions(socket: socket.socket):
-    action_payload_char = "i???????????ffffff"
+def get_actions(sock: socket.socket):
+    action_payload_char = "iiiiiiiiiiffffff"
     action_payload_size = struct.calcsize(action_payload_char)
 
-    payload = socket.recv(action_payload_size)
-    actions = struct.unpack(action_payload_char, payload)
+    while True:
+        payload = sock.recv(action_payload_size)
+        if payload:
+            actions = struct.unpack(action_payload_char, payload)
+            break
 
     return actions
 
@@ -222,30 +227,33 @@ def process_actions(actions: tuple, melee_match:MeleeInstance.Melee):
         melee_match.pause()
     elif options == 2:
         melee_match.resume()
-    elif 3:
+    elif options == 3:
         melee_match.reset()
     
-def game_loop(melee_match: MeleeInstance.Melee, socket: socket.socket):
-    stage, ppo_character, cpu_character, cpu_level, n_projectiles = get_match_settings(socket, melee_match)
+def game_loop(melee_match: MeleeInstance.Melee, sock: socket.socket):
+    sock.send(b'\0'*25)
+
+    stage, ppo_character, cpu_character, cpu_level, n_projectiles = get_match_settings(sock, melee_match)
 
     ppo_position, cpu_position, blastzones, edge, edge_ground, right_platform, left_platform, top_platform = melee_match.game_init(stage, ppo_character, cpu_character, cpu_level)
 
-    send_infos(socket, ppo_position, cpu_position, blastzones, edge, edge_ground, right_platform, left_platform, top_platform)
+    send_infos(sock, ppo_position, cpu_position, blastzones, edge, edge_ground, right_platform, left_platform, top_platform)
 
-    observation_payload_char = "l?ffffiiff??ii??iiii??hhhhhhhh??ffffffff??ffffffffffffffffh" + "ffffhhhh"*n_projectiles
+    observation_payload_char = "l?ffffiiff??ii??iiii??iiiiiiii??ffffffff??ffffffffffffffffi" + "ffffiiii"*n_projectiles
     observation_payload_size = struct.calcsize(observation_payload_char)
 
     while True:
         gamestate = melee_match.console.step()
-        if gamestate.menu_state == melee.Menu.POSTGAME_SCORES:
-            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, socket, gamestate, True)
+        if gamestate.menu_state == melee.Menu.CHARACTER_SELECT:
+            projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
+            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, sock, gamestate, True)
             break
 
         if gamestate.menu_state in [melee.Menu.IN_GAME, melee.Menu.SUDDEN_DEATH]:
             projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
-            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, socket, gamestate, False)
+            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, sock, gamestate, False)
 
-            actions = get_actions(socket)
+            actions = get_actions(sock)
             process_actions(actions, melee_match)
             if actions[0] == 3:
                 break
@@ -254,7 +262,7 @@ if __name__ == "__main__":
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     connect(sock, "172.16.1.32", 8888)
 
-    melee_match = MeleeInstance.Melee(1, 2, "/home/jul/Desktop/SSBM.iso", ".config/Slippi\ Launcher/netplay-beta/squashfs-root/usr/bin", False)
+    melee_match = MeleeInstance.Melee(1, 2, "/home/jul/Downloads/SSBM.iso", "/home/jul/.config/Slippi Launcher/netplay/squashfs-root/usr/bin", False)
 
     while True:
         try:
