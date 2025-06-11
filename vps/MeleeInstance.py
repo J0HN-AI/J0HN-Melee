@@ -11,7 +11,7 @@ def platform_None_fix(platform):
 
 class Melee:
     def __init__(self, ppoPort, cpuPort, isoPath,
-                  dolphinPath="/home/jul/.config/Slippi Launcher/netplay/squashfs-root/usr/bin", fullscreen=False, ):
+                  dolphinPath="/home/jul/.config/Slippi Launcher/netplay/squashfs-root/usr/bin", fullscreen=False):
         self._isoPath = isoPath
         self._dolphinPath = dolphinPath
         self._fullscreen = fullscreen
@@ -19,7 +19,7 @@ class Melee:
         self.cpuPort = cpuPort
         self.paused = False
 
-        self.console = melee.Console(path=self._dolphinPath, fullscreen=self._fullscreen)
+        self.console = melee.Console(path=self._dolphinPath, fullscreen=self._fullscreen, gfx_backend="Vulkan")
 
         self.ppoController = melee.Controller(console=self.console, port=self.ppoPort)
         #self.other_dolphin_controller(self.ppoPort, "Xbox")
