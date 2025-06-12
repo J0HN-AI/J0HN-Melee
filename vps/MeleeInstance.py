@@ -127,7 +127,7 @@ class Melee:
     def pause(self):
         if not self.paused:
             self.ppoController.simple_press(0.5, 0.5, melee.Button.BUTTON_START)
-            self.pause = True
+            self.paused = True
 
     def resume(self):
         if self.paused:
