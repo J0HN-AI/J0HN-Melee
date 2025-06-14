@@ -53,7 +53,7 @@ def setup_loopback_connections(loopback_int_socket: socket.socket, routing_table
             loopback_instances_connected += 1
             loopback_spinner.text = f"Waiting for loopback instances {loopback_instances_connected}/{nb_instances}"
 
-        loopback_spinner.succeed("All instances loopback connected ~(^-^)~")
+        loopback_spinner.succeed("All loopback instances are connected ~(^-^)~")
     except KeyboardInterrupt:
             loopback_spinner.fail(f"Only {loopback_instances_connected} loopback instance/s are connected (╯°□°）╯︵ ┻━┻")
     
@@ -80,7 +80,7 @@ def setup_client_connections(client_int_socket:socket.socket, socket_table:dict,
             clients_instances_connected += 1
             clients_spinner.text = f"Waiting for client instances {clients_instances_connected}/{nb_instances}"
 
-        clients_spinner.succeed("All client instances connected ~(^-^)~")
+        clients_spinner.succeed("All client instances are connected ~(^-^)~")
     except KeyboardInterrupt:
             clients_spinner.fail(f"Only {clients_instances_connected} client instance/s are connected (╯°□°）╯︵ ┻━┻")
 
