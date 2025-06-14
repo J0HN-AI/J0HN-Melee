@@ -5,8 +5,6 @@ import melee
 import math
 from halo import Halo
 
-melee.ProjectileType.ARROW.value
-
 class tcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -81,7 +79,7 @@ def get_match_settings(sock: socket.socket, melee: MeleeInstance.Melee):
             settings_spinner.succeed()
             settings_spinner.stop()
             stage, ppo_character, cpu_character, cpu_level, n_projectiles = struct.unpack("hhhhh", payload)
-            print(f"{tcolors.OKGREEN}{melee.get_player(ppo_character).name}{tcolors.ENDC} VS {tcolors.FAIL}{melee.get_player(cpu_character)}{tcolors.ENDC} "
+            print(f"{tcolors.OKGREEN}{melee.get_player(ppo_character).name}{tcolors.ENDC} VS {tcolors.FAIL}{melee.get_player(cpu_character).name}{tcolors.ENDC} "
                    +f"level {tcolors.BOLD}{cpu_level}{tcolors.ENDC} on stage {tcolors.OKBLUE}{melee.get_stage(stage).name}{tcolors.ENDC}")
             return stage, ppo_character, cpu_character, cpu_level, n_projectiles
 
