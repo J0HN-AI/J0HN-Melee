@@ -5,7 +5,7 @@ import os
 
 def platform_None_fix(platform):
     if platform == (None, None, None):
-        return (-1, -1, -1)
+        return (-255, -255, -255)
     else:
         return platform
 
