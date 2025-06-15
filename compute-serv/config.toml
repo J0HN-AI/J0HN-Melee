@@ -11,6 +11,7 @@ DDP_ip = "127.0.0.1"
 DDP_port = "3241"
 router_port = 5555
 envs_base_port = 5000
+envs_connection_timeout = 10
 
 [training-config]
 n_epochs = 40
@@ -28,9 +29,7 @@ gae = 0.95
 policy_clip = 0.2
 
 
-[instances]
-
-[instances.0]
+[[instances]]
 ip = "172.16.1.120"
 stage = "FINAL_DESTINATION"
 ai_character = "MARIO"
