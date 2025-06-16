@@ -4,6 +4,8 @@ from gymnasium import spaces as sp
 import socket
 import time
 import struct
+from halo import Halo
+from random import randint
 
 class tcolors:
     HEADER = '\033[95m'
@@ -16,11 +18,146 @@ class tcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-class MeleeEnv(gym.Env):
+class match_maker:
     def __init__(self, config:dict, rank:int):
         self.config = config
         self.rank = rank
+        self.match_history = {
+            "n_games": 0,
+            "victory": 0,
+            "defeat": 0,
+            "stage": self._get_stage(config["instances"][self.rank]["stage"]),
+            "agent_character": self._get_player(config["instances"][self.rank]["agent_character"]),
+            "cpu_character": self._get_player(config["instances"][self.rank]["cpu_character"]),
+            "cpu_level": config["instances"][self.rank]["cpu_level"],
+        }
+
+    def register_match(self, winner:str):
+        if winner == "agent":
+            self.match_history.update({
+                "n_games": self.match_history["n_games"] + 1,
+                "victory": self.match_history["victory"] + 1,
+            })
+        else:
+            self.match_history.update({
+                "n_games": self.match_history["n_games"] + 1,
+                "defeat": self.match_history["defeat"] + 1,
+            })
+    
+    def new_match(self):
+        stage_change_rate = self.config["instances"][self.rank]["stage_change_rate"]
+        agent_character_change_rate = self.config["instances"][self.rank]["agent_character_change_rate"]
+        cpu_character_change_rate = self.config["instances"][self.rank]["cpu_character_change_rate"]
+        minimum_games_berfore_changing_cpu_level = self.config["instances"][self.rank]["minimum_games_berfore_changing_cpu_level"]
+        cpu_level_progression_rate = self.config["instances"][self.rank]["cpu_level_progression_rate"]
+        max_cpu_level =  self.config["instances"][self.rank]["max_cpu_level"]
+        
+        if stage_change_rate != 0 and stage_change_rate <= self.match_history["n_games"]:
+            random_stage = randint(0, 5)
+            if random_stage == self.match_history["stage"]:
+                self.match_history.update({ "stage": (random_stage + 1) % 6 })
+            else:
+                self.match_history.update({ "stage": random_stage })
+
+        if agent_character_change_rate != 0 and agent_character_change_rate <= self.match_history["n_games"]:
+            random_character = randint(0, 24)
+            if random_character == self.match_history["agent_character"]:
+                self.match_history.update({ "agent_character": (random_character + 1) % 25 })
+            else:
+                self.match_history.update({ "agent_character": random_character })
+        
+        if cpu_character_change_rate != 0 and cpu_character_change_rate <= self.match_history["n_games"]:
+            random_character = randint(0, 24)
+            if random_character == self.match_history["cpu_character"]:
+                self.match_history.update({ "cpu_character": (random_character + 1) % 25 })
+            else:
+                self.match_history.update({ "cpu_character": random_character })
+
+        if minimum_games_berfore_changing_cpu_level <= self.match_history["n_games"] % (minimum_games_berfore_changing_cpu_level + 1) and self.match_history["cpu_level"] < max_cpu_level:
+            if self.match_history["defeat"] == 0:
+                if self.match_history["victory"] > cpu_level_progression_rate:
+                    self.match_history.update({ "cpu_level": self.match_history["cpu_level"] + 1 })
+                else:
+                    if (self.match_history["victory"] / self.match_history["defeat"]) > cpu_level_progression_rate:
+                        self.match_history.update({ "cpu_level": self.match_history["cpu_level"] + 1 })
+
+        return (self.match_history["stage"], self.match_history["agent_character"], self.match_history["cpu_character"], self.match_history["cpu_level"])
+        
+    def _get_stage(self, stage):
+        match stage:
+            case "BATTLEFIELD":
+                return 0x0
+            case "FINAL_DESTINATION":
+                return 0x1
+            case "DREAMLAND":
+                return 0x2
+            case "FOUNTAIN_OF_DREAMS":
+                return 0x3
+            case "POKEMON_STADIUM":
+                return 0x4
+            case "YOSHIS_STORY":
+                return 0x5
+    
+    def _get_player(self, str_player):
+        match str_player:
+            case "DOC":
+                return 0x00
+            case "MARIO":
+                return 0x01
+            case "LUIGI":
+                return 0x02
+            case "BOWSER":
+                return 0x03
+            case "PEACH":
+                return 0x04
+            case "YOSHI":
+                return 0x05
+            case "DK":
+                return 0x06
+            case "CPTFALCON":
+                return 0x07
+            case "GANONDORF":
+                return 0x08
+            case "FALCO":
+                return 0x09
+            case "FOX":
+                return 0x0a
+            case "NESS":
+                return 0x0b
+            case "POPO":
+                return 0x0c
+            case "KIRBY":
+                return 0x0d
+            case "SAMUS":
+                return 0x0e
+            case "ZELDA":
+                return 0x0f
+            case "LINK":
+                return 0x10
+            case "YLINK":
+                return 0x11
+            case "PICHU":
+                return 0x12
+            case "PIKACHU":
+                return 0x13
+            case "JIGGLYPUFF":
+                return 0x14
+            case "MEWTWO":
+                return 0x15
+            case "GAMEANDWATCH":
+                return 0x16
+            case "MARTH":
+                return 0x17
+            case "ROY":
+                return 0x18
+
+class MeleeEnv(gym.Env):
+    def __init__(self, config:dict, rank:int, debug:float = False):
+        self.config = config
+        self.rank = rank
+        self.debug = debug
         self.n_projectiles = config["training-config"]["n_projectiles"]
+        self.match_maker = match_maker(config, rank)
 
         self.observation_space = sp.Dict({
             "frame": sp.Box(low=-16384, high=32767, shape=(1,), dtype=np.int32),
@@ -64,7 +201,7 @@ class MeleeEnv(gym.Env):
                 "ecb_right_x": sp.Box(low=-32768, high=32767, shape=(1,), dtype=np.float64),
                 "ecb_right_y": sp.Box(low=-32768, high=32767, shape=(1,), dtype=np.float64)
             }),
-            "opponent": sp.Dict({
+            "cpu": sp.Dict({
                 "character": sp.Discrete(25),
                 "position": sp.Box(low=np.array([-255.0, -255.0]), high=np.array([255.0, 255.0]), dtype=np.float64),
                 "percent": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
@@ -214,7 +351,7 @@ class MeleeEnv(gym.Env):
                         "ecb_right_x": np.array([observation[54]], dtype=np.float64),
                         "ecb_right_y": np.array([observation[56]], dtype=np.float64)
                     },
-                    "opponent": {
+                    "cpu": {
                         "character": game_settings[2],
                         "position": np.array([observation[4], observation[5]], dtype=np.float64),
                         "percent": np.array([observation[7]], dtype=np.int16),
@@ -257,5 +394,39 @@ class MeleeEnv(gym.Env):
                 infos = struct.unpack(infos_payload_char, infos_payload)
                 
                 return infos
+
+    def _wait_for_instance(self):
+        if self.debug:
+            ready_spinner = Halo(f"Waiting for instance {self.rank}. IP: {self.config["instances"][0]["ip"]}", spinner="dots")
+            ready_spinner.start()
             
-        
+            try:
+                while True:
+                    if self.sock.recv(25):
+                        ready_spinner.succeed(f"Instance {self.rank} is READY !!")
+                        break
+            except KeyboardInterrupt:
+                ready_spinner.fail(f"Instance {self.rank} is UNREACHABLE !!")
+        else:
+            while True:
+                if self.sock.recv(25):
+                    ready_spinner.succeed(f"Instance {self.rank} is READY !!")
+                    break
+    
+    def _send_match_settings(self, settings:tuple):
+        settings_payload = struct.pack("hhhhh", *settings, self.n_projectiles)
+        self.sock.send(settings_payload)
+
+    def reset(self, *, seed = None, options = None):
+        super().reset(seed=seed)
+
+        self._wait_for_instance()
+
+        match_settings = self.match_maker.new_match()
+        self._send_match_settings(match_settings)
+
+        match_infos = self._get_infos()
+
+        observation = self._get_obs(match_infos, match_settings)
+
+        return observation, {"match_settings": match_settings}
