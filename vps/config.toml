@@ -1,0 +1,11 @@
+[network]
+brain_ip = "172.16.1.32"
+brain_port = 8888
+
+[dolphin]
+dolphin_path = "/home/jul/.config/Slippi Launcher/netplay/squashfs-root/usr/bin"
+SSBM_path = "/home/jul/Downloads/SSBM.iso"
+agent_port = 1
+cpu_port = 2
+fullscreen = false
+render_backend = "Vulkan"

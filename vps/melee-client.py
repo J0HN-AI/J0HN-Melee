@@ -1,9 +1,12 @@
+from halo import Halo
+
 import MeleeInstance
 import socket
 import struct
 import melee
 import math
-from halo import Halo
+import tomli
+import pathlib
 
 class tcolors:
     HEADER = '\033[95m'
@@ -257,10 +260,22 @@ def game_loop(melee_match: MeleeInstance.Melee, sock: socket.socket):
                 break
 
 if __name__ == "__main__":
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    connect(sock, "172.16.1.32", 8888)
+    config = tomli.load(open(f"{pathlib.Path(__file__).parent.resolve()}/config.toml", "rb"))
+    
+    brain_ip = config["network"]["brain_ip"]
+    brain_port = config["network"]["brain_port"]
 
-    melee_match = MeleeInstance.Melee(1, 2, "/home/jul/Downloads/SSBM.iso", "/home/jul/.config/Slippi Launcher/netplay/squashfs-root/usr/bin", False)
+    dolphin_path = config["dolphin"]["dolphin_path"]
+    SSBM_path = config["dolphin"]["SSBM_path"]
+    agent_port = config["dolphin"]["agent_port"]
+    cpu_port = config["dolphin"]["cpu_port"]
+    fullscreen = config["dolphin"]["fullscreen"]
+    render_backend = config["dolphin"]["render_backend"]
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connect(sock, brain_ip, brain_port)
+
+    melee_match = MeleeInstance.Melee(agent_port, cpu_port, SSBM_path, dolphin_path, fullscreen, render_backend)
 
     while True:
         try:
