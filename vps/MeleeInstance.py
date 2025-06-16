@@ -10,33 +10,33 @@ def platform_None_fix(platform):
         return platform
 
 class Melee:
-    def __init__(self, ppoPort, cpuPort, isoPath,
-                  dolphinPath="/home/jul/.config/Slippi Launcher/netplay/squashfs-root/usr/bin", fullscreen=False):
-        self._isoPath = isoPath
-        self._dolphinPath = dolphinPath
+    def __init__(self, agent_port, cpu_port, iso_path,
+                  dolphin_path="/home/jul/.config/Slippi Launcher/netplay/squashfs-root/usr/bin", fullscreen=False, backend="Vulkan"):
+        self._iso_path = iso_path
+        self._dolphin_path = dolphin_path
         self._fullscreen = fullscreen
-        self.ppoPort = ppoPort
-        self.cpuPort = cpuPort
+        self.agent_port = agent_port
+        self.cpu_port = cpu_port
         self.paused = False
 
-        self.console = melee.Console(path=self._dolphinPath, fullscreen=self._fullscreen, gfx_backend="Vulkan")
+        self.console = melee.Console(path=self._dolphin_path, fullscreen=self._fullscreen, gfx_backend=backend)
 
-        self.ppoController = melee.Controller(console=self.console, port=self.ppoPort)
-        #self.other_dolphin_controller(self.ppoPort, "Xbox")
-        self.cpuController = melee.Controller(console=self.console, port=self.cpuPort)
+        self.agent_controller = melee.Controller(console=self.console, port=self.agent_port)
+        #self.other_dolphin_controller(self.agent_port, "Xbox")
+        self.cpu_controller = melee.Controller(console=self.console, port=self.cpu_port)
 
         self.console.connect()
         print("Console connected")
 
-        self.console.run(iso_path=self._isoPath)
+        self.console.run(iso_path=self._iso_path)
 
-        self.ppoController.connect()
-        self.cpuController.connect()
+        self.agent_controller.connect()
+        self.cpu_controller.connect()
 
         while True:
             gamestate = self.console.step()
             if gamestate.menu_state != melee.Menu.CHARACTER_SELECT:
-                 melee.MenuHelper.choose_versus_mode(gamestate, self.cpuController)
+                 melee.MenuHelper.choose_versus_mode(gamestate, self.cpu_controller)
             else:
                 break
     
@@ -46,7 +46,7 @@ class Melee:
                 os.mkfifo(pipes_path)
 
         controller_config_dolphin_path = self.console._get_dolphin_config_path() + "GCPadNew.ini"
-        controller_config_slippi_path = self._dolphinPath + f"/Sys/Config/Profiles/GCPad/{config_name}.ini" 
+        controller_config_slippi_path = self._dolphin_path + f"/Sys/Config/Profiles/GCPad/{config_name}.ini" 
         config_dolphin = configparser.ConfigParser()
         config_slippi = configparser.ConfigParser()
         config_dolphin.read(controller_config_dolphin_path)
@@ -71,13 +71,13 @@ class Melee:
         with open(dolphin_config_path, "w") as dolphinfile:
             config.write(dolphinfile)
 
-    def game_init(self, stage, ppo, cpu, cpuLevel):
+    def game_init(self, stage, ppo, cpu, cpu_level):
         self.paused = False
         self.stage = self.get_stage(stage)
-        self.ppoPlayer = self.get_player(ppo)
-        self.cpuPlayer = self.get_player(cpu)
-        self.cpuLevel = cpuLevel
-        ControllerJitter = ""
+        self.agent_player = self.get_player(ppo)
+        self.cpu_player = self.get_player(cpu)
+        self.cpu_level = cpu_level
+        controller_jitter = ""
         isChosen = False
         while True:
             gamestate = self.console.step()
@@ -86,52 +86,52 @@ class Melee:
             
             elif gamestate.menu_state == melee.Menu.CHARACTER_SELECT:
                 if isChosen == False:
-                    melee.MenuHelper.choose_character(self.cpuPlayer,
+                    melee.MenuHelper.choose_character(self.cpu_player,
                                               gamestate,
-                                              self.cpuController,
-                                              cpu_level=self.cpuLevel,
+                                              self.cpu_controller,
+                                              cpu_level=self.cpu_level,
                                               costume=0,
                                               start=False)
                        
-                    melee.MenuHelper.choose_character(self.ppoPlayer,
+                    melee.MenuHelper.choose_character(self.agent_player,
                                               gamestate,
-                                              self.ppoController,
+                                              self.agent_controller,
                                               cpu_level=0,
                                               costume=0,
                                               start=False)
 
-                ControllerJitter += str(gamestate.players[self.cpuPort].controller_status.value)
+                controller_jitter += str(gamestate.players[self.cpu_port].controller_status.value)
 
-                if ControllerJitter.find("330011") != -1:
+                if controller_jitter.find("330011") != -1:
                     isChosen = True
                     time.sleep(6/60)
-                    self.cpuController.simple_press(button=melee.Button.BUTTON_START, x=0.5, y=0.5)
-                    ControllerJitter = ""
+                    self.cpu_controller.simple_press(button=melee.Button.BUTTON_START, x=0.5, y=0.5)
+                    controller_jitter = ""
                         
             else:                                  
                 if (gamestate.menu_state == melee.Menu.STAGE_SELECT):
-                    melee.MenuHelper.choose_stage(self.stage, gamestate, self.cpuController)
+                    melee.MenuHelper.choose_stage(self.stage, gamestate, self.cpu_controller)
 
-    def reset(self, stage, ppo, cpu,  cpuLevel):
-        ppoPort = self.ppoPort
-        cpuPort = self.cpuPort
+    def reset(self, stage, ppo, cpu,  cpu_level):
+        agent_port = self.agent_port
+        cpu_port = self.cpu_port
 
-        self.ppoController.disconnect()
-        self.cpuController.disconnect()
+        self.agent_controller.disconnect()
+        self.cpu_controller.disconnect()
         self.console.stop()
         time.sleep(1.5)
 
-        self.__init__(ppoPort, cpuPort, self._isoPath, self._dolphinPath, self._fullscreen)
-        return self.game_init(stage, ppo, cpu, cpuLevel)
+        self.__init__(agent_port, cpu_port, self._iso_path, self._dolphin_path, self._fullscreen)
+        return self.game_init(stage, ppo, cpu, cpu_level)
 
     def pause(self):
         if not self.paused:
-            self.ppoController.simple_press(0.5, 0.5, melee.Button.BUTTON_START)
+            self.agent_controller.simple_press(0.5, 0.5, melee.Button.BUTTON_START)
             self.paused = True
 
     def resume(self):
         if self.paused:
-            self.ppoController.simple_press(0.5, 0.5, melee.Button.BUTTON_START)
+            self.agent_controller.simple_press(0.5, 0.5, melee.Button.BUTTON_START)
             self.paused = False
     
     def get_stage(self, hex_stage):
@@ -205,8 +205,8 @@ class Melee:
                 return melee.Character.ROY
 
     def get_stage_data(self, gamestate: melee.GameState):
-        return ([gamestate.players[self.ppoPort].position.x, gamestate.players[self.ppoPort].position.y],
-                [gamestate.players[self.cpuPort].position.x, gamestate.players[self.cpuPort].position.y],
+        return ([gamestate.players[self.agent_port].position.x, gamestate.players[self.agent_port].position.y],
+                [gamestate.players[self.cpu_port].position.x, gamestate.players[self.cpu_port].position.y],
                 melee.BLASTZONES[self.stage],  
                 (melee.EDGE_POSITION[self.stage], -melee.EDGE_POSITION[self.stage]),
                 (melee.EDGE_GROUND_POSITION[self.stage], -melee.EDGE_GROUND_POSITION[self.stage]),
