@@ -32,13 +32,13 @@ policy_clip = 0.2
 [[instances]]
 ip = "172.16.1.120"
 stage = "FINAL_DESTINATION"
-ai_character = "MARIO"
+agent_character = "MARIO"
 cpu_character = "LUIGI"
 cpu_level = 1
 
-ai_character_change_rate = 0 # Changes character every x games (0 for no change)
-cpu_character_change_rate = 0 # Same as AI
-
-auto_characters = true
-cpu_level_progression = false
-cpu_level_progression_rate = [0.6, 10] # Changes cpu level if the award x was reached y times in a row
+stage_change_rate = 0 # Changes stage every x games (0 for no change)
+agent_character_change_rate = 0 # Changes character every x games (0 for no change)
+cpu_character_change_rate = 0 # Changes character every x games (0 for no change)
+minimum_games_berfore_changing_cpu_level = 10
+cpu_level_progression_rate = 0.6 # Changes cpu level when the AI V/D ratio is greater than this value (0 for no change)
+max_cpu_level = 9
