@@ -6,6 +6,7 @@ import time
 import struct
 from halo import Halo
 from random import randint
+import math
 
 class tcolors:
     HEADER = '\033[95m'
@@ -26,10 +27,10 @@ class match_maker:
             "n_games": 0,
             "victory": 0,
             "defeat": 0,
-            "stage": self._get_stage(config["instances"][self.rank]["stage"]),
-            "agent_character": self._get_player(config["instances"][self.rank]["agent_character"]),
-            "cpu_character": self._get_player(config["instances"][self.rank]["cpu_character"]),
-            "cpu_level": config["instances"][self.rank]["cpu_level"],
+            "stage": self._get_stage(config["instances"][f"{self.rank}"]["stage"]),
+            "agent_character": self._get_player(config["instances"][f"{self.rank}"]["agent_character"]),
+            "cpu_character": self._get_player(config["instances"][f"{self.rank}"]["cpu_character"]),
+            "cpu_level": config["instances"][f"{self.rank}"]["cpu_level"],
         }
 
     def register_match(self, winner:str):
@@ -45,28 +46,28 @@ class match_maker:
             })
     
     def new_match(self):
-        stage_change_rate = self.config["instances"][self.rank]["stage_change_rate"]
-        agent_character_change_rate = self.config["instances"][self.rank]["agent_character_change_rate"]
-        cpu_character_change_rate = self.config["instances"][self.rank]["cpu_character_change_rate"]
-        minimum_games_berfore_changing_cpu_level = self.config["instances"][self.rank]["minimum_games_berfore_changing_cpu_level"]
-        cpu_level_progression_rate = self.config["instances"][self.rank]["cpu_level_progression_rate"]
-        max_cpu_level =  self.config["instances"][self.rank]["max_cpu_level"]
+        stage_change_rate = self.config["instances"][f"{self.rank}"]["stage_change_rate"]
+        agent_character_change_rate = self.config["instances"][f"{self.rank}"]["agent_character_change_rate"]
+        cpu_character_change_rate = self.config["instances"][f"{self.rank}"]["cpu_character_change_rate"]
+        minimum_games_berfore_changing_cpu_level = self.config["instances"][f"{self.rank}"]["minimum_games_berfore_changing_cpu_level"]
+        cpu_level_progression_rate = self.config["instances"][f"{self.rank}"]["cpu_level_progression_rate"]
+        max_cpu_level =  self.config["instances"][f"{self.rank}"]["max_cpu_level"]
         
-        if stage_change_rate != 0 and stage_change_rate <= self.match_history["n_games"]:
+        if stage_change_rate != 0 and stage_change_rate <= self.match_history["n_games"] % (stage_change_rate + 1):
             random_stage = randint(0, 5)
             if random_stage == self.match_history["stage"]:
                 self.match_history.update({ "stage": (random_stage + 1) % 6 })
             else:
                 self.match_history.update({ "stage": random_stage })
 
-        if agent_character_change_rate != 0 and agent_character_change_rate <= self.match_history["n_games"]:
+        if agent_character_change_rate != 0 and agent_character_change_rate <= self.match_history["n_games"] % (agent_character_change_rate + 1):
             random_character = randint(0, 24)
             if random_character == self.match_history["agent_character"]:
                 self.match_history.update({ "agent_character": (random_character + 1) % 25 })
             else:
                 self.match_history.update({ "agent_character": random_character })
         
-        if cpu_character_change_rate != 0 and cpu_character_change_rate <= self.match_history["n_games"]:
+        if cpu_character_change_rate != 0 and cpu_character_change_rate <= self.match_history["n_games"] % (cpu_character_change_rate + 1):
             random_character = randint(0, 24)
             if random_character == self.match_history["cpu_character"]:
                 self.match_history.update({ "cpu_character": (random_character + 1) % 25 })
@@ -246,6 +247,9 @@ class MeleeEnv(gym.Env):
 
         return digital_buttons + analog_buttons
     
+    def _clamp(self, nb, nb_min, nb_max):
+        return max(min(nb_max, nb), nb_min)
+
     def _make_projectiles_dict(self, n_projectiles:int):
         projectiles = {"n_active_projectiles": sp.Box(low=0, high=n_projectiles, shape=(1,), dtype=np.int8)}
 
@@ -382,7 +386,7 @@ class MeleeEnv(gym.Env):
                         "ecb_right_y": np.array([observation[57]], dtype=np.float64)
                     },
                     "projectiles": self._extract_projectiles_data(observation)
-                }
+                }, bool(observation[1])
     
     def _get_infos(self):
         infos_payload_char = "fffffffffffffffffffff"
@@ -397,7 +401,7 @@ class MeleeEnv(gym.Env):
 
     def _wait_for_instance(self):
         if self.debug:
-            ready_spinner = Halo(f"Waiting for instance {self.rank}. IP: {self.config["instances"][0]["ip"]}", spinner="dots")
+            ready_spinner = Halo(f"Waiting for instance {self.rank}. IP: {self.config["instances"][f"{self.rank}"]["ip"]}", spinner="dots")
             ready_spinner.start()
             
             try:
@@ -417,16 +421,78 @@ class MeleeEnv(gym.Env):
         settings_payload = struct.pack("hhhhh", *settings, self.n_projectiles)
         self.sock.send(settings_payload)
 
+    def _calculate_reward(self, current_percent_agent, current_percent_cpu, current_frame,
+                            stock_agent, stock_cpu, agent_punch_power_modifer, 
+                            cpu_punch_power_modifier, agent_combo_modifier, cpu_combo_modifier,
+                            sub_frame_damage_modifier, percent_modifier, agent_win_reward, cpu_win_reward):
+        percent_agent_change = max(0, current_percent_agent - self.reward_memory["last_percent_agent"])
+        percent_cpu_change = max(0, current_percent_cpu - self.reward_memory["last_percent_cpu"])
+        percent_cpu_agent_difference = abs(current_percent_cpu - current_percent_agent)
+
+        if percent_agent_change > 0:
+            self.reward_memory["last_change_frame_agent"] = current_frame
+        if percent_cpu_change > 0:
+            self.reward_memory["last_change_frame_cpu"] = current_frame
+
+        delta_frame_agent = (current_frame - self.reward_memory["last_change_frame_agent"]) / cpu_combo_modifier
+        delta_frame_cpu = (current_frame - self.reward_memory["last_change_frame_cpu"]) / agent_combo_modifier
+
+        percent_agent_no_0 = current_percent_agent if current_percent_agent != 0 else 1
+        percent_cpu_no_0 = current_percent_cpu if current_percent_cpu != 0 else 1
+
+        reward_agent = math.pow(percent_cpu_agent_difference / percent_agent_no_0, percent_cpu_change * agent_punch_power_modifer) / max(sub_frame_damage_modifier, delta_frame_cpu)
+        reward_cpu = math.pow(percent_cpu_agent_difference / percent_cpu_no_0, percent_agent_change * cpu_punch_power_modifier) / max(sub_frame_damage_modifier, delta_frame_agent)
+
+        cpu_stock_bonus = 1 + (4 - stock_cpu)
+        agent_stock_penalty = 1 / (1 + (4 - stock_agent))
+        stock_modifier = cpu_stock_bonus * agent_stock_penalty
+
+        total_reward = (reward_agent - reward_cpu) * stock_modifier
+
+        if stock_agent < self.reward_memory["last_stock_agent"]:
+            total_reward = total_reward - cpu_win_reward / (current_percent_agent / percent_modifier)
+        
+        if stock_cpu < self.reward_memory["last_stock_cpu"]:
+            total_reward = total_reward + agent_win_reward / (current_percent_cpu / percent_modifier)
+        
+        self.reward_memory["last_percent_agent"] = current_percent_agent
+        self.reward_memory["last_percent_cpu"] = current_percent_cpu
+        self.reward_memory["last_stock_agent"] = stock_agent
+        self.reward_memory["last_stock_cpu"] = stock_cpu
+
+        return self._clamp(total_reward, -10000.0, 10000.0)
+
     def reset(self, *, seed = None, options = None):
         super().reset(seed=seed)
 
+        self.reward_memory = {
+            "last_percent_agent": 0,
+            "last_percent_cpu": 0,
+            "last_stock_agent": 4,
+            "last_stock_cpu": 4,
+            "last_change_frame_agent": 0,
+            "last_change_frame_cpu": 0
+            }
+
         self._wait_for_instance()
 
-        match_settings = self.match_maker.new_match()
-        self._send_match_settings(match_settings)
+        self.match_settings = self.match_maker.new_match()
+        self._send_match_settings(self.match_settings)
+    
+        self.match_infos = self._get_infos()
 
-        match_infos = self._get_infos()
+        observation, done = self._get_obs(self.match_infos, self.match_settings)
 
-        observation = self._get_obs(match_infos, match_settings)
+        return observation, {"match_settings": self.match_settings}
+    
+    def step(self, action):
+        action_payload_char = "iiiiiiiiiiffffff"
+        controller_action = self._action_to_controller(action)
+        self.last_action = controller_action
 
-        return observation, {"match_settings": match_settings}
+        action_payload = struct.pack(action_payload_char, 0, *controller_action)
+        self.sock.send(action_payload)
+
+        observation, done = self._get_obs(self.match_infos, self.match_settings)
+
+        
