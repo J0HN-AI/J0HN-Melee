@@ -29,16 +29,18 @@ gae = 0.95
 policy_clip = 0.2
 
 
-[[instances]]
+[instances]
+
+[instances.0]
 ip = "172.16.1.120"
 stage = "FINAL_DESTINATION"
 agent_character = "MARIO"
 cpu_character = "LUIGI"
 cpu_level = 1
 
-stage_change_rate = 0 # Changes stage every x games (0 for no change)
-agent_character_change_rate = 0 # Changes character every x games (0 for no change)
-cpu_character_change_rate = 0 # Changes character every x games (0 for no change)
-minimum_games_berfore_changing_cpu_level = 10
+stage_change_rate = 2 # Changes stage every x games (0 for no change)
+agent_character_change_rate = 3 # Changes character every x games (0 for no change)
+cpu_character_change_rate = 3 # Changes character every x games (0 for no change)
+minimum_games_berfore_changing_cpu_level = 3
 cpu_level_progression_rate = 0.6 # Changes cpu level when the AI V/D ratio is greater than this value (0 for no change)
 max_cpu_level = 9
