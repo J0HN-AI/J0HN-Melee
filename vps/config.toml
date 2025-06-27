@@ -9,3 +9,6 @@ agent_port = 1
 cpu_port = 2
 fullscreen = false
 render_backend = "Vulkan"
+display_id = 0
+wait_time_after_connection_attempts = 5
+initialization_timeout = 30
