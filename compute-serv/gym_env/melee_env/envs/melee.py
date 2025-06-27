@@ -53,28 +53,28 @@ class match_maker:
         cpu_level_progression_rate = self.config["instances"][f"{self.rank}"]["cpu_level_progression_rate"]
         max_cpu_level =  self.config["instances"][f"{self.rank}"]["max_cpu_level"]
         
-        if stage_change_rate != 0 and stage_change_rate <= self.match_history["n_games"] % (stage_change_rate + 1):
+        if stage_change_rate != 0 and self.match_history["n_games"] % stage_change_rate == 0 and self.match_history["n_games"] != 0:
             random_stage = randint(0, 5)
             if random_stage == self.match_history["stage"]:
                 self.match_history.update({ "stage": (random_stage + 1) % 6 })
             else:
                 self.match_history.update({ "stage": random_stage })
 
-        if agent_character_change_rate != 0 and agent_character_change_rate <= self.match_history["n_games"] % (agent_character_change_rate + 1):
+        if agent_character_change_rate != 0 and self.match_history["n_games"] % agent_character_change_rate == 0 and self.match_history["n_games"] != 0:
             random_character = randint(0, 24)
             if random_character == self.match_history["agent_character"]:
                 self.match_history.update({ "agent_character": (random_character + 1) % 25 })
             else:
                 self.match_history.update({ "agent_character": random_character })
         
-        if cpu_character_change_rate != 0 and cpu_character_change_rate <= self.match_history["n_games"] % (cpu_character_change_rate + 1):
+        if cpu_character_change_rate != 0 and self.match_history["n_games"] % cpu_character_change_rate == 0 and self.match_history["n_games"] != 0:
             random_character = randint(0, 24)
             if random_character == self.match_history["cpu_character"]:
                 self.match_history.update({ "cpu_character": (random_character + 1) % 25 })
             else:
                 self.match_history.update({ "cpu_character": random_character })
 
-        if minimum_games_berfore_changing_cpu_level <= self.match_history["n_games"] % (minimum_games_berfore_changing_cpu_level + 1) and self.match_history["cpu_level"] < max_cpu_level:
+        if self.match_history["n_games"] % minimum_games_berfore_changing_cpu_level == 0 and self.match_history["cpu_level"] < max_cpu_level and self.match_history["n_games"] != 0:
             if self.match_history["defeat"] == 0:
                 if self.match_history["victory"] > cpu_level_progression_rate:
                     self.match_history.update({ "cpu_level": self.match_history["cpu_level"] + 1 })
