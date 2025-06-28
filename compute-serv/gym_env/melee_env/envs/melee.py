@@ -421,10 +421,9 @@ class MeleeEnv(gym.Env):
         settings_payload = struct.pack("hhhhh", *settings, self.n_projectiles)
         self.sock.send(settings_payload)
 
-    def _calculate_reward(self, current_percent_agent, current_percent_cpu, current_frame,
-                            stock_agent, stock_cpu, agent_punch_power_modifer, 
-                            cpu_punch_power_modifier, agent_combo_modifier, cpu_combo_modifier,
-                            sub_frame_damage_modifier, percent_modifier, agent_win_reward, cpu_win_reward):
+    def _calculate_reward(self, current_percent_agent, current_percent_cpu, current_frame, stock_agent, 
+                          stock_cpu, agent_punch_power_modifier, cpu_punch_power_modifier, agent_combo_modifier, 
+                          cpu_combo_modifier, sub_frame_damage_modifier, percent_modifier, agent_win_reward, cpu_win_reward):
         percent_agent_change = max(0, current_percent_agent - self.reward_memory["last_percent_agent"])
         percent_cpu_change = max(0, current_percent_cpu - self.reward_memory["last_percent_cpu"])
         percent_cpu_agent_difference = abs(current_percent_cpu - current_percent_agent)
@@ -440,7 +439,7 @@ class MeleeEnv(gym.Env):
         percent_agent_no_0 = current_percent_agent if current_percent_agent != 0 else 1
         percent_cpu_no_0 = current_percent_cpu if current_percent_cpu != 0 else 1
 
-        reward_agent = math.pow(percent_cpu_agent_difference / percent_agent_no_0, percent_cpu_change * agent_punch_power_modifer) / max(sub_frame_damage_modifier, delta_frame_cpu)
+        reward_agent = math.pow(percent_cpu_agent_difference / percent_agent_no_0, percent_cpu_change * agent_punch_power_modifier) / max(sub_frame_damage_modifier, delta_frame_cpu)
         reward_cpu = math.pow(percent_cpu_agent_difference / percent_cpu_no_0, percent_agent_change * cpu_punch_power_modifier) / max(sub_frame_damage_modifier, delta_frame_agent)
 
         cpu_stock_bonus = 1 + (4 - stock_cpu)
@@ -486,6 +485,15 @@ class MeleeEnv(gym.Env):
         return observation, {"match_settings": self.match_settings}
     
     def step(self, action):
+        agent_punch_power_modifier = self.config["reward-settings"]["agent_punch_power_modifier"]
+        cpu_punch_power_modifier = self.config["reward-settings"]["cpu_punch_power_modifier"]
+        agent_combo_modifier = self.config["reward-settings"]["agent_combo_modifier"]
+        cpu_combo_modifier = self.config["reward-settings"]["cpu_combo_modifier"]
+        sub_frame_damage_modifier = self.config["reward-settings"]["sub_frame_damage_modifier"]
+        percent_modifier = self.config["reward-settings"]["percent_modifier"]
+        agent_win_reward = self.config["reward-settings"]["agent_win_reward"]
+        cpu_win_reward = self.config["reward-settings"]["cpu_win_reward"]
+
         action_payload_char = "iiiiiiiiiiffffff"
         controller_action = self._action_to_controller(action)
         self.last_action = controller_action
@@ -494,5 +502,15 @@ class MeleeEnv(gym.Env):
         self.sock.send(action_payload)
 
         observation, done = self._get_obs(self.match_infos, self.match_settings)
-
         
+        current_percent_agent = observation["agent"]["percent"]
+        current_percent_cpu = observation["cpu"]["percent"]
+        current_frame = observation["frame"]
+        stock_agent = observation["agent"]["stock"]
+        stock_cpu = observation["cpu"]["stock"]
+
+        reward = self._calculate_reward(current_percent_agent, current_percent_cpu, current_frame, stock_agent, 
+                               stock_cpu, agent_punch_power_modifier, cpu_punch_power_modifier, agent_combo_modifier, 
+                               cpu_combo_modifier, sub_frame_damage_modifier, percent_modifier, agent_win_reward, cpu_win_reward)
+        
+        return observation, reward, done, False, None
