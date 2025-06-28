@@ -28,6 +28,15 @@ critic_lr = 0.0003
 gae = 0.95
 policy_clip = 0.2
 
+[reward-settings]
+agent_punch_power_modifier = 2
+cpu_punch_power_modifier = 2
+agent_combo_modifier = 60
+cpu_combo_modifier = 120
+sub_frame_damage_modifier = 0.001
+percent_modifier = 20
+agent_win_reward = 100
+cpu_win_reward = 100
 
 [instances]
 
