@@ -238,8 +238,6 @@ def process_actions(actions: tuple, melee_match:MeleeInstance.Melee):
         melee_match.pause()
     elif options == 2:
         melee_match.resume()
-    elif options == 3:
-        melee_match.reset()
     
 def game_loop(melee_match: MeleeInstance.Melee, sock: socket.socket, initialization_timeout:int):
     agent_position, cpu_position, blastzones, edge, edge_ground, right_platform, left_platform, top_platform = (None, None, None, None, None, None, None, None)
@@ -259,23 +257,33 @@ def game_loop(melee_match: MeleeInstance.Melee, sock: socket.socket, initializat
     observation_payload_char = "l?ffffiiff??ii??iiii??iiiiiiii??ffffffff??ffffffffffffffffi" + "ffffiiii"*n_projectiles
     observation_payload_size = struct.calcsize(observation_payload_char)
 
+    paused = False
+
     while True:
-        gamestate = melee_match.console.step()
-        if gamestate.menu_state == melee.Menu.CHARACTER_SELECT:
-            actions_2_console((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 0, 0), melee_match.agent_controller)
-            projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
-            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, sock, gamestate, True)
-            break
+        if not paused:
+            gamestate = melee_match.console.step()
+            if gamestate.menu_state == melee.Menu.CHARACTER_SELECT:
+                actions_2_console((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 0, 0), melee_match.agent_controller)
+                projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
+                send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, sock, gamestate, True)
+                break
 
-        if gamestate.menu_state in [melee.Menu.IN_GAME, melee.Menu.SUDDEN_DEATH]:
-            projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
-            send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, sock, gamestate, False)
+            if gamestate.menu_state in [melee.Menu.IN_GAME, melee.Menu.SUDDEN_DEATH]:
+                projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
+                send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, sock, gamestate, False)
 
+                actions = get_actions(sock)
+                process_actions(actions, melee_match)
+                if actions[0] == 1:
+                    paused = True
+                elif actions[0] == 3:
+                    actions_2_console((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 0, 0), melee_match.agent_controller)
+                    break
+        else:
             actions = get_actions(sock)
             process_actions(actions, melee_match)
-            if actions[0] == 3:
-                actions_2_console((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 0, 0), melee_match.agent_controller)
-                break
+            if actions[0] == 2:
+                paused = False
 
 if __name__ == "__main__":
     config = tomli.load(open(f"{pathlib.Path(__file__).parent.resolve()}/config.toml", "rb"))

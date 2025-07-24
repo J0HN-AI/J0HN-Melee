@@ -3,6 +3,7 @@ import time
 import configparser
 import math
 import os
+import subprocess
 
 def platform_None_fix(platform):
     if platform == (None, None, None):
@@ -342,12 +343,16 @@ class Melee:
 
     def pause(self):
         if not self.paused:
-            self.agent_controller.simple_press(0.5, 0.5, melee.Button.BUTTON_START)
+            subprocess.run(["xdotool", "keydown", "F10"])
+            time.sleep(0.1)
+            subprocess.run(["xdotool", "keyup", "F10"])
             self.paused = True
 
     def resume(self):
         if self.paused:
-            self.agent_controller.simple_press(0.5, 0.5, melee.Button.BUTTON_START)
+            subprocess.run(["xdotool", "keydown", "F10"])
+            time.sleep(0.1)
+            subprocess.run(["xdotool", "keyup", "F10"])
             self.paused = False
     
     def _get_stage(self, hex_stage):
