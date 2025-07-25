@@ -445,7 +445,7 @@ class MeleeEnv(gym.Env):
         self.action_sock.send(settings_payload)
 
     def _get_game_logs(self, observation):
-        game_time = round(observation["frame"]/60, 2)
+        game_time = round(observation["frame"]/60, 3)
         stage = observation["stage"]["stage_id"]
         agent_character = observation["agent"]["character"]
         agent_percent = observation["agent"]["percent"].item()
