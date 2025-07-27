@@ -83,6 +83,9 @@ class match_maker:
                         self.match_history.update({ "cpu_level": self.match_history["cpu_level"] + 1 })
 
         return (self.match_history["stage"], self.match_history["agent_character"], self.match_history["cpu_character"], self.match_history["cpu_level"])
+    
+    def get_match_data(self):
+        return self.match_history["victory"], self.match_history["defeat"], self.match_history["cpu_level"]
         
     def _get_stage(self, stage):
         match stage:
@@ -157,6 +160,8 @@ class MeleeEnv(gym.Env):
         self.config = config
         self.rank = rank
         self.debug = debug
+        self.training_logs = (0, 0.0, 0.0, 0)
+        self.epochs_logs = (0, 0)
         self.n_projectiles = config["training-config"]["n_projectiles"]
         self.match_maker = match_maker(config, rank)
 
@@ -237,7 +242,7 @@ class MeleeEnv(gym.Env):
 
         #Buttons: A B X Y Z DPAD_UP DPAD_DOWN DPAD_LEFT DPAD_RIGHT MAIN_X MAIN_Y C_X C_Y LEFT_TRIGGER RIGHT_TRIGGER
         #Indexes: 0 1 2 3 4    5       6         7         8          9     10   11  12      13            14
-        self.action_space = sp.Box(low=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), high=np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]), dtype=np.float16)
+        self.action_space = sp.Box(low=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), high=np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]), dtype=np.float32)
         
         self._connect_to_router()
         self._connect_to_logger()
@@ -502,10 +507,10 @@ class MeleeEnv(gym.Env):
         total_reward = (reward_agent - reward_cpu) * stock_modifier
 
         if stock_agent < self.reward_memory["last_stock_agent"]:
-            total_reward = total_reward - cpu_win_reward / (current_percent_agent / percent_modifier)
+            total_reward = total_reward - cpu_win_reward / (percent_agent_no_0 / percent_modifier)
         
         if stock_cpu < self.reward_memory["last_stock_cpu"]:
-            total_reward = total_reward + agent_win_reward / (current_percent_cpu / percent_modifier)
+            total_reward = total_reward + agent_win_reward / (percent_cpu_no_0 / percent_modifier)
         
         self.reward_memory["last_percent_agent"] = current_percent_agent
         self.reward_memory["last_percent_cpu"] = current_percent_cpu
@@ -534,8 +539,10 @@ class MeleeEnv(gym.Env):
         self.match_infos = self._get_infos()
 
         observation, done = self._get_obs(self.match_infos, self.match_settings)
+        self.last_observation = observation
 
         self.game_logs = self._get_game_logs(observation)
+        self.match_data = self.match_maker.get_match_data()
 
         return observation, {"match_settings": self.match_settings}
     
@@ -557,6 +564,14 @@ class MeleeEnv(gym.Env):
         self.action_sock.send(action_payload)
 
         observation, done = self._get_obs(self.match_infos, self.match_settings)
+
+        if done:
+            if self.last_observation["agent"]["stock"] == 0:
+                self.match_maker.register_match("cpu")
+            else:
+                self.match_maker.register_match("agent")
+        else:
+            self.last_observation = observation
 
         self.game_logs = self._get_game_logs(observation)
         
@@ -584,10 +599,15 @@ class MeleeEnv(gym.Env):
         action_payload = struct.pack(action_payload_char, 2, *self.last_action)
         self.action_sock.send(action_payload)
 
-    def send_logs(self, game, score, avg_score, learn_iters):
-        payload_char = "fiiiiiiiiffi"
+    def send_logs(self, game:int=0, score:float=0.0, avg_score:float=0.0, learn_iters:int=0, epoch:int=0, max_epoch:int=0, learn_mode=False):
+        payload_char = "fiiiiiiiiffiiiiii"
 
-        logs_payload = struct.pack(payload_char, *self.game_logs, game, score, avg_score, learn_iters)
+        if learn_mode:
+            self.epochs_logs = (epoch, max_epoch)
+        else:
+            self.training_logs = (game, score, avg_score, learn_iters)
+
+        logs_payload = struct.pack(payload_char, *self.game_logs, *self.training_logs, *self.epochs_logs, *self.match_data)
         self.logger_sock.send(logs_payload)
 
     def close(self):
@@ -596,5 +616,7 @@ class MeleeEnv(gym.Env):
         action_payload = struct.pack(action_payload_char, 3, *self.last_action)
         self.action_sock.send(action_payload)
 
+        self.action_sock.shutdown(1)
         self.action_sock.close()
+        self.logger_sock.shutdown(1)
         self.logger_sock.close()
