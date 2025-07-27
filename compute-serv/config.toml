@@ -9,11 +9,9 @@ DDP_port = 3241
 router_port = 5555
 envs_base_port = 5000
 envs_connection_timeout = 60
+bind_retry_timeout = 5
 envs_logger_base_port = 6000
 logger_port = 9000
-logger_websocket_port = 9500
-web_interface_ip = "172.16.1.32"
-web_interface_port = 10000
 
 [backup-logs]
 data_path = "/home/jul/NetDrives/AI-Storage/J0HNMELEE"
