@@ -271,16 +271,25 @@ class MeleeEnv(gym.Env):
         router_port = self.config["network-config"]["router_port"]
         env_base_port = self.config["network-config"]["envs_base_port"]
         timeout = self.config["network-config"]["envs_connection_timeout"]
+        bind_retry_timeout = self.config["network-config"]["bind_retry_timeout"]
         
-        action_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        action_sock.bind(("127.0.0.1", env_base_port + self.rank))
+        while True:
+            try:
+                action_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                action_sock.bind(("127.0.0.1", env_base_port + self.rank))
+                break
+            except OSError:
+                print(f"{tcolors.BOLD}{tcolors.FAIL}Unable to bind client interface retrying in {bind_retry_timeout}s{tcolors.ENDC}")
+                time.sleep(bind_retry_timeout)
+            except KeyboardInterrupt:
+                break
         
         now = time.time()
         while True:
             try:
                 action_sock.connect(("127.0.0.1", router_port))
                 break
-            except socket.error:
+            except socket.error or OSError:
                 if time.time() > (now + timeout):
                     print(f"{tcolors.BOLD}{tcolors.FAIL}Unable to connect to router{tcolors.ENDC}")
                     exit(-1)
@@ -291,12 +300,21 @@ class MeleeEnv(gym.Env):
     
     def _connect_to_logger(self):
         logger_port = self.config["network-config"]["logger_port"]
-        env_base_port = self.config["network-config"]["envs_logger_base_port"]
+        env_logger_base_port = self.config["network-config"]["envs_logger_base_port"]
         timeout = self.config["network-config"]["envs_connection_timeout"]
-        
-        logger_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        logger_sock.bind(("127.0.0.1", env_base_port + self.rank))
-        
+        bind_retry_timeout = self.config["network-config"]["bind_retry_timeout"]
+
+        while True:
+            try:
+                logger_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                logger_sock.bind(("127.0.0.1", env_logger_base_port + self.rank))
+                break
+            except OSError:
+                print(f"{tcolors.BOLD}{tcolors.FAIL}Unable to bind logger interface retrying in {bind_retry_timeout}s{tcolors.ENDC}")
+                time.sleep(bind_retry_timeout)
+            except KeyboardInterrupt:
+                break
+
         now = time.time()
         while True:
             try:
