@@ -238,6 +238,8 @@ def process_actions(actions: tuple, melee_match:MeleeInstance.Melee):
         melee_match.pause()
     elif options == 2:
         melee_match.resume()
+    elif options == 3:
+        melee_match.stop()
     
 def game_loop(melee_match: MeleeInstance.Melee, sock: socket.socket, initialization_timeout:int):
     agent_position, cpu_position, blastzones, edge, edge_ground, right_platform, left_platform, top_platform = (None, None, None, None, None, None, None, None)
@@ -266,7 +268,7 @@ def game_loop(melee_match: MeleeInstance.Melee, sock: socket.socket, initializat
                 actions_2_console((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 0, 0), melee_match.agent_controller)
                 projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
                 send_observation(observation_payload_char, observation_payload_size, projectiles, blastzones, sock, gamestate, True)
-                break
+                return 1
 
             if gamestate.menu_state in [melee.Menu.IN_GAME, melee.Menu.SUDDEN_DEATH]:
                 projectiles = get_projectiles(gamestate, n_projectiles, blastzones)
@@ -277,8 +279,8 @@ def game_loop(melee_match: MeleeInstance.Melee, sock: socket.socket, initializat
                 if actions[0] == 1:
                     paused = True
                 elif actions[0] == 3:
-                    actions_2_console((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 0, 0), melee_match.agent_controller)
-                    break
+                    sock.close()
+                    return 0
         else:
             actions = get_actions(sock)
             process_actions(actions, melee_match)
@@ -310,8 +312,10 @@ if __name__ == "__main__":
 
     while True:
         try:
-            game_loop(melee_match, sock, initialization_timeout)
+            exit_code = game_loop(melee_match, sock, initialization_timeout)
+            if exit_code == 0:
+                break
         except KeyboardInterrupt:
-            melee_match.console.stop()
+            melee_match.stop()
             sock.close()
             break

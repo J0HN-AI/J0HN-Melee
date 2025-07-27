@@ -445,7 +445,7 @@ class MeleeEnv(gym.Env):
         self.action_sock.send(settings_payload)
 
     def _get_game_logs(self, observation):
-        game_time = round(observation["frame"]/60, 3)
+        game_time = round(observation["frame"].item()/60, 3)
         stage = observation["stage"]["stage_id"]
         agent_character = observation["agent"]["character"]
         agent_percent = observation["agent"]["percent"].item()
@@ -573,5 +573,10 @@ class MeleeEnv(gym.Env):
         self.logger_sock.send(logs_payload)
 
     def close(self):
+        action_payload_char = "iiiiiiiiiiffffff"
+
+        action_payload = struct.pack(action_payload_char, 3, *self.last_action)
+        self.action_sock.send(action_payload)
+
         self.action_sock.close()
         self.logger_sock.close()
