@@ -329,6 +329,18 @@ class Melee:
             elif gamestate.menu_state == melee.Menu.STAGE_SELECT and not stage_selected:
                 stage_selected = self._choose_stage(self.stage, self.agent_controller)
 
+    def reset(self, stage, agent, cpu,  cpu_level):
+        agent_port = self.agent_port
+        cpu_port = self.cpu_port
+
+        self.agent_controller.disconnect()
+        self.cpu_controller.disconnect()
+        self.console.stop()
+        time.sleep(5)
+
+        self.__init__(agent_port, cpu_port, self._iso_path, self._dolphin_path, self._fullscreen)
+        return self.game_init(stage, agent, cpu, cpu_level)
+
     def stop(self):
         self.agent_controller.disconnect()
         self.cpu_controller.disconnect()

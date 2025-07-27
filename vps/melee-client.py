@@ -10,6 +10,7 @@ import pathlib
 import time
 import os
 import concurrent.futures
+import sys
 
 class tcolors:
     HEADER = '\033[95m'
@@ -86,9 +87,10 @@ def ping(sock: socket.socket, payload_size: int):
 def get_match_settings(sock: socket.socket, melee: MeleeInstance.Melee):
     settings_spinner = Halo(text='Waiting for match settings', spinner='dots')
     settings_spinner.start()
+
     while True:
-        payload = sock.recv(10)
-        if payload:
+        payload = sock.recv(999)
+        if payload and sys.getsizeof(payload) == 43: # calcsize of hhhhh to prefent miss input
             settings_spinner.succeed()
             settings_spinner.stop()
             stage, agent_character, cpu_character, cpu_level, n_projectiles = struct.unpack("hhhhh", payload)
@@ -316,6 +318,10 @@ if __name__ == "__main__":
             if exit_code == 0:
                 break
         except KeyboardInterrupt:
+            melee_match.stop()
+            sock.close()
+            break
+        except BrokenPipeError:
             melee_match.stop()
             sock.close()
             break
