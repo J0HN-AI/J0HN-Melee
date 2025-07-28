@@ -15,6 +15,7 @@ logger_port = 9000
 
 [backup-logs]
 data_path = "/home/jul/NetDrives/AI-Storage/J0HNMELEE"
+show_instances_id_as = "IP" #IP/PORT/ID
 
 [training-config]
 n_epochs = 40
