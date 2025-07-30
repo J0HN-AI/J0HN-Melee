@@ -6,7 +6,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.live import Live
 from datetime import  timedelta
-from select import select 
+from select import select
+import pandas as pd
 
 import pathlib
 import socket
@@ -17,6 +18,7 @@ import sys
 import tty
 import sys
 import termios
+import os
 
 class tcolors:
     HEADER = '\033[95m'
@@ -120,7 +122,7 @@ def loopback_2_client_router(loopback_socket:socket.socket, client_socket:socket
         loopback_socket.close()
     
 def loopback_2_logs(loopback_socket:socket.socket, logs_dict, int_addr, config, stop, lock):
-    payload_char = "fiiiiiiiiffiiiiii"
+    payload_char = "fiiiiiiiiiffiiiiiiii"
     payload_size = struct.calcsize(payload_char)
     log_id_mode = config["backup-logs"]["show_instances_id_as"]
     logger_base_port = config["network-config"]["envs_logger_base_port"]
@@ -142,7 +144,7 @@ def loopback_2_logs(loopback_socket:socket.socket, logs_dict, int_addr, config, 
 
         instance_log = {
             instance_id: {
-                "game": log[8],
+                "game": log[9],
                 "game_time": round(log[0], 3),
                 "stage": get_stage(log[1]),
                 "agent": get_player(log[2]),
@@ -151,14 +153,17 @@ def loopback_2_logs(loopback_socket:socket.socket, logs_dict, int_addr, config, 
                 "CPU": get_player(log[5]),
                 "CPU_percent": log[6],
                 "CPU_stock": log[7],
-                "score": round(log[9], 5),
-                "avg_score": round(log[10], 5),
-                "learn_iters": log[11],
-                "epoch": log[12],
-                "max_epoch": log[13],
-                "victory": log[14],
-                "defeat": log[15],
-                "cpu_level": log[16]
+                "frame": log[8],
+                "score": round(log[10], 5),
+                "avg_score": round(log[11], 5),
+                "learn_iters": log[12],
+                "epoch": log[13],
+                "max_epoch": log[14],
+                "victory": log[15],
+                "defeat": log[16],
+                "cpu_level": log[17],
+                "learn_mode": bool(log[18]),
+                "done": bool(log[19])
                 }
         }
 
@@ -370,6 +375,7 @@ def read_key_nonblocking():
 
 def get_max_pages(logs_dict, logs_lock):
     instance_log = {}
+    current_logs = {}
 
     with logs_lock:
         current_logs = dict(logs_dict)
@@ -401,6 +407,91 @@ def get_max_pages(logs_dict, logs_lock):
     
     return (len(instance_log) + max_per_page - 1) // max_per_page
 
+def make_dirs(path:str):
+    needed_dirs = ["backup", "logs"]
+
+    for ndir in needed_dirs:
+        os.makedirs(f"{path}/{ndir}", exist_ok=True)
+
+def get_logfiles(path:str, logs_filename:str, nb_instances:int, config:dict):
+    log_files_buffer = {}
+    log_file_buffer = None
+    instances_config = config["instances"]
+    instances_base_port = config["network-config"]["envs_base_port"]
+    instance_ids_mode = config["backup-logs"]["show_instances_id_as"]
+    instances_filter_mode = config["backup-logs"]["instances_filter_mode"]
+    instances_filtered = config["backup-logs"]["instances_filtered"]
+
+    local_time = time.localtime()
+    csv_filename = logs_filename.replace("[d]", str(local_time.tm_mday)).replace("[m]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
+    
+    for i in range(nb_instances):
+        if instances_filter_mode == "WHITELIST":
+            if i not in instances_filtered:
+                continue
+        elif instances_filter_mode == "BLACKLIST":
+            if i in instances_filtered:
+                continue
+
+        if csv_filename.find("[ID]") == -1:
+            csv_filename = f"{csv_filename}{i}"
+        else:
+            if instance_ids_mode == "IP":
+                csv_filename = csv_filename.replace("[ID]", instances_config[str(i)]["ip"])
+            elif instance_ids_mode == "PORT":
+                csv_filename = csv_filename.replace("[ID]", str(instances_base_port+i))
+            else: # ID
+                csv_filename = csv_filename.replace("[ID]", str(i))
+        
+        if os.path.exists(f"{path}/logs/{csv_filename}.csv"):
+            log_file_buffer = open(f"{path}/logs/{csv_filename}.csv", 'a')
+        else:
+            log_file_buffer = open(f"{path}/logs/{csv_filename}.csv", 'w')
+        
+        if instance_ids_mode == "IP":
+            log_files_buffer[instances_config[str(i)]["ip"]] = log_file_buffer
+        elif instance_ids_mode == "PORT":
+            log_files_buffer[str(instances_base_port+i)] = log_file_buffer
+        else: # ID
+            log_files_buffer[str(i)] = log_file_buffer
+
+        return log_files_buffer
+
+def close_logfiles(log_files_buffer:dict):
+    for buffer in log_files_buffer.values():
+        buffer.close()
+
+def save_to_csv(logs_dict, logs_lock, log_files_buffer):
+    if log_files_buffer != {}:
+        current_logs = {}
+        with logs_lock:
+            current_logs = dict(logs_dict)
+
+        for instance_id, buffer in log_files_buffer.items():
+            log = current_logs.get(instance_id, False)
+            if log:
+                if not log["learn_mode"] and not log["done"]:
+                    log_data = {
+                        "game": log["game"],
+                        "game_time": log["game_time"],
+                        "stage": log["stage"],
+                        "agent": log["agent"],
+                        "agent_percent": log["agent_percent"],
+                        "agent_stock": log["agent_stock"],
+                        "CPU": log["CPU"],
+                        "CPU_percent": log["CPU_percent"],
+                        "CPU_stock": log["CPU_stock"],
+                        "score": log["score"],
+                        "avg_score": log["avg_score"],
+                        "learn_iters": log["learn_iters"],
+                        "victory": log["victory"],
+                        "defeat": log["defeat"],
+                        "cpu_level": log["cpu_level"],
+                    }
+
+                    df = pd.DataFrame(log_data, index=[log["frame"]])
+                    df.to_csv(buffer, mode='a', header=not buffer.tell(), index=False)
+
 if __name__ == "__main__":
     console = Console()
     print(Figlet(font="larry3d").renderText("J0HN Melee"))
@@ -413,6 +504,8 @@ if __name__ == "__main__":
     nb_projectiles = config["training-config"]["n_projectiles"]
     nb_instances = len(instances_configuration)
     n_epochs = config["training-config"]["n_epochs"]
+    logs_path = config["backup-logs"]["data_path"]
+    logs_filename = config["backup-logs"]["csv_logs_filename"]
 
     stop_routers = th.Event()
 
@@ -432,6 +525,11 @@ if __name__ == "__main__":
     
     client_int_socket = setup_client_int(network_config, nb_instances)
     setup_client_connections(client_int_socket, socket_table, stop_routers, nb_projectiles, nb_instances)
+
+    make_dirs(logs_path)
+    log_files_buffer = get_logfiles(logs_path, logs_filename, nb_instances, config)
+
+    now = time.time()
     
     try:
         with Live(logs_2_terminal(logs_dict, logs_lock, current_page),  screen=True, refresh_per_second=60) as live:
@@ -449,10 +547,15 @@ if __name__ == "__main__":
                 
                 live.update(logs_2_terminal(logs_dict, logs_lock, current_page, terminal_height))
 
+                if (now + config["backup-logs"]["save_logs_every"]) <= time.time():
+                    now = time.time()
+                    save_to_csv(logs_dict, logs_lock, log_files_buffer)
+
     except KeyboardInterrupt:
         stop_routers.set()
         stop_loggers.set()
         client_int_socket.close()
         loopback_int_socket.close()
         logger_int_socket.close()
+        close_logfiles(log_files_buffer)
         del logs_lock
