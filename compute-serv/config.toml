@@ -14,8 +14,12 @@ envs_logger_base_port = 6000
 logger_port = 9000
 
 [backup-logs]
-data_path = "/home/jul/NetDrives/AI-Storage/J0HNMELEE"
+data_path = "/home/jul/Desktop/TEST" #/home/jul/NetDrives/AI-Storage/J0HNMELEE
 show_instances_id_as = "IP" #IP/PORT/ID
+save_logs_every = 0.5 #seconds
+csv_logs_filename = "J0HNMelee_[ID]_[d]:[m]:[y]"
+instances_filter_mode = "WHITELIST" # WHITELIST/BLACKLIST
+instances_filtered = [0] # instances id in the [instances] list
 
 [training-config]
 n_epochs = 40
@@ -33,14 +37,26 @@ gae = 0.95
 policy_clip = 0.2
 
 [reward-settings]
-agent_punch_power_modifier = 2
-cpu_punch_power_modifier = 2
-agent_combo_modifier = 60
-cpu_combo_modifier = 120
+agent_punch_power_modifier = 1
+cpu_punch_power_modifier = 5
+agent_combo_modifier = 30
+cpu_combo_modifier = 200
 sub_frame_damage_modifier = 0.001
-percent_modifier = 20
-agent_win_reward = 100
-cpu_win_reward = 100
+percent_modifier = 30
+agent_win_reward = 100000
+cpu_win_reward = 5000000
+agent_reward_overflow = 100000
+cpu_reward_overflow = 100000
+agent_percent_difference_modifier = 5
+cpu_percent_difference_modifier = 1
+agent_winner_reward = 100000
+cpu_winner_reward = -100000
+agent_idle_modifier = 0.5
+agent_idle_penalty_start = 180
+agent_stock_penalty_modifier = 1
+cpu_stock_penalty_modifier = 2.2
+reward_set = [-10000,10000]
+reward_reducer = 10
 
 [instances]
 
@@ -49,11 +65,11 @@ ip = "172.16.1.120"
 stage = "FINAL_DESTINATION"
 agent_character = "MARIO"
 cpu_character = "LUIGI"
-cpu_level = 1
+cpu_level = 9
 
 stage_change_rate = 2 # Changes stage every x games (0 for no change)
 agent_character_change_rate = 3 # Changes character every x games (0 for no change)
 cpu_character_change_rate = 3 # Changes character every x games (0 for no change)
 minimum_games_berfore_changing_cpu_level = 3
 cpu_level_progression_rate = 0.6 # Changes cpu level when the AI V/D ratio is greater than this value (0 for no change)
-max_cpu_level = 9
+max_cpu_level = 1

@@ -476,12 +476,16 @@ class MeleeEnv(gym.Env):
         cpu_character = observation["cpu"]["character"]
         cpu_percent = observation["cpu"]["percent"].item()
         cpu_stock = observation["cpu"]["stock"].item()
+        frame = observation["frame"].item()
 
-        return (game_time, stage, agent_character, agent_percent, agent_stock, cpu_character, cpu_percent, cpu_stock)
+        return (game_time, stage, agent_character, agent_percent, agent_stock, cpu_character, cpu_percent, cpu_stock, frame)
 
     def _calculate_reward(self, current_percent_agent, current_percent_cpu, current_frame, stock_agent, 
                           stock_cpu, agent_punch_power_modifier, cpu_punch_power_modifier, agent_combo_modifier, 
-                          cpu_combo_modifier, sub_frame_damage_modifier, percent_modifier, agent_win_reward, cpu_win_reward):
+                          cpu_combo_modifier, sub_frame_damage_modifier, percent_modifier, agent_win_reward, 
+                          cpu_win_reward, reward_set, reward_reducer, agent_reward_overflow, cpu_reward_overflow,
+                          agent_percent_difference_modifier, cpu_percent_difference_modifier, agent_idle_modifier,
+                          agent_idle_penalty_start, agent_stock_penalty_modifier, cpu_stock_penalty_modifier, cpu_invulnerable):
         percent_agent_change = max(0, current_percent_agent - self.reward_memory["last_percent_agent"])
         percent_cpu_change = max(0, current_percent_cpu - self.reward_memory["last_percent_cpu"])
         percent_cpu_agent_difference = abs(current_percent_cpu - current_percent_agent)
@@ -494,17 +498,30 @@ class MeleeEnv(gym.Env):
         delta_frame_agent = (current_frame - self.reward_memory["last_change_frame_agent"]) / cpu_combo_modifier
         delta_frame_cpu = (current_frame - self.reward_memory["last_change_frame_cpu"]) / agent_combo_modifier
 
+        agent_idle_penalty = 0
+        if (current_frame - self.reward_memory["last_change_frame_cpu"]) > 1 + agent_idle_penalty_start and not cpu_invulnerable:
+            agent_idle_penalty = ((current_frame - self.reward_memory["last_change_frame_cpu"]) - agent_idle_penalty_start) * agent_idle_modifier
+
         percent_agent_no_0 = current_percent_agent if current_percent_agent != 0 else 1
         percent_cpu_no_0 = current_percent_cpu if current_percent_cpu != 0 else 1
 
-        reward_agent = math.pow(percent_cpu_agent_difference / percent_agent_no_0, percent_cpu_change * agent_punch_power_modifier) / max(sub_frame_damage_modifier, delta_frame_cpu)
-        reward_cpu = math.pow(percent_cpu_agent_difference / percent_cpu_no_0, percent_agent_change * cpu_punch_power_modifier) / max(sub_frame_damage_modifier, delta_frame_agent)
+        reward_agent = 0
+        reward_cpu = 0
 
-        cpu_stock_bonus = 1 + (4 - stock_cpu)
-        agent_stock_penalty = 1 / (1 + (4 - stock_agent))
-        stock_modifier = cpu_stock_bonus * agent_stock_penalty
+        cpu_stock_penalty = (1 + (4 - stock_cpu)) * cpu_stock_penalty_modifier
+        agent_stock_penalty = (1 + (4 - stock_agent)) * agent_stock_penalty_modifier
 
-        total_reward = (reward_agent - reward_cpu) * stock_modifier
+        try:
+            reward_agent = math.pow((percent_cpu_agent_difference / agent_percent_difference_modifier)/ percent_agent_no_0, percent_cpu_change * agent_punch_power_modifier) / max(sub_frame_damage_modifier, delta_frame_cpu)
+        except OverflowError:
+            reward_agent = agent_reward_overflow
+        
+        try:
+            reward_cpu = math.pow((percent_cpu_agent_difference / cpu_percent_difference_modifier)/ percent_cpu_no_0, percent_agent_change * cpu_punch_power_modifier) / max(sub_frame_damage_modifier, delta_frame_agent)
+        except OverflowError:
+            reward_cpu = cpu_reward_overflow
+
+        total_reward = (reward_agent/agent_stock_penalty - reward_cpu/cpu_stock_penalty) - agent_idle_penalty
 
         if stock_agent < self.reward_memory["last_stock_agent"]:
             total_reward = total_reward - cpu_win_reward / (percent_agent_no_0 / percent_modifier)
@@ -517,7 +534,7 @@ class MeleeEnv(gym.Env):
         self.reward_memory["last_stock_agent"] = stock_agent
         self.reward_memory["last_stock_cpu"] = stock_cpu
 
-        return self._clamp(total_reward, -10000.0, 10000.0)
+        return self._clamp(total_reward / reward_reducer, reward_set[0], reward_set[1])
 
     def reset(self, *, seed = None, options = None):
         super().reset(seed=seed)
@@ -555,6 +572,18 @@ class MeleeEnv(gym.Env):
         percent_modifier = self.config["reward-settings"]["percent_modifier"]
         agent_win_reward = self.config["reward-settings"]["agent_win_reward"]
         cpu_win_reward = self.config["reward-settings"]["cpu_win_reward"]
+        reward_set = self.config["reward-settings"]["reward_set"]
+        agent_reward_overflow = self.config["reward-settings"]["agent_reward_overflow"]
+        cpu_reward_overflow = self.config["reward-settings"]["cpu_reward_overflow"]
+        reward_reducer = self.config["reward-settings"]["reward_reducer"]
+        agent_percent_difference_modifier = self.config["reward-settings"]["agent_percent_difference_modifier"]
+        cpu_percent_difference_modifier = self.config["reward-settings"]["cpu_percent_difference_modifier"]
+        agent_idle_modifier = self.config["reward-settings"]["agent_idle_modifier"]
+        agent_idle_penalty_start = self.config["reward-settings"]["agent_idle_penalty_start"]
+        agent_winner_reward = self.config["reward-settings"]["agent_winner_reward"]
+        cpu_winner_reward = self.config["reward-settings"]["cpu_winner_reward"]
+        agent_stock_penalty_modifier = self.config["reward-settings"]["agent_stock_penalty_modifier"]
+        cpu_stock_penalty_modifier = self.config["reward-settings"]["cpu_stock_penalty_modifier"]
 
         action_payload_char = "iiiiiiiiiiffffff"
         controller_action = self._action_to_controller(action)
@@ -580,11 +609,22 @@ class MeleeEnv(gym.Env):
         current_frame = observation["frame"]
         stock_agent = observation["agent"]["stock"]
         stock_cpu = observation["cpu"]["stock"]
-
-        reward = self._calculate_reward(current_percent_agent, current_percent_cpu, current_frame, stock_agent, 
-                               stock_cpu, agent_punch_power_modifier, cpu_punch_power_modifier, agent_combo_modifier, 
-                               cpu_combo_modifier, sub_frame_damage_modifier, percent_modifier, agent_win_reward, cpu_win_reward)
+        cpu_invulnerable = observation["cpu"]["invulnerable"]
         
+        reward = 0
+        if not done:
+            reward = self._calculate_reward(current_percent_agent, current_percent_cpu, current_frame, stock_agent, 
+                                stock_cpu, agent_punch_power_modifier, cpu_punch_power_modifier, agent_combo_modifier, 
+                                cpu_combo_modifier, sub_frame_damage_modifier, percent_modifier, agent_win_reward, 
+                                cpu_win_reward, reward_set, reward_reducer, agent_reward_overflow, cpu_reward_overflow,
+                                agent_percent_difference_modifier, cpu_percent_difference_modifier, agent_idle_modifier,
+                                agent_idle_penalty_start, agent_stock_penalty_modifier, cpu_stock_penalty_modifier, bool(cpu_invulnerable))
+        else:
+            if self.last_observation["agent"]["stock"] == 0:
+                reward = cpu_winner_reward
+            else:
+                reward = agent_winner_reward
+    
         return observation, reward, done, False, {}
     
     def pause_game(self):
@@ -599,15 +639,15 @@ class MeleeEnv(gym.Env):
         action_payload = struct.pack(action_payload_char, 2, *self.last_action)
         self.action_sock.send(action_payload)
 
-    def send_logs(self, game:int=0, score:float=0.0, avg_score:float=0.0, learn_iters:int=0, epoch:int=0, max_epoch:int=0, learn_mode=False):
-        payload_char = "fiiiiiiiiffiiiiii"
+    def send_logs(self, game:int=0, score:float=0.0, avg_score:float=0.0, learn_iters:int=0, epoch:int=0, max_epoch:int=0, learn_mode=False, done=False):
+        payload_char = "fiiiiiiiiiffiiiiiiii"
 
         if learn_mode:
             self.epochs_logs = (epoch, max_epoch)
         else:
             self.training_logs = (game, score, avg_score, learn_iters)
 
-        logs_payload = struct.pack(payload_char, *self.game_logs, *self.training_logs, *self.epochs_logs, *self.match_data)
+        logs_payload = struct.pack(payload_char, *self.game_logs, *self.training_logs, *self.epochs_logs, *self.match_data, int(learn_mode), int(done))
         self.logger_sock.send(logs_payload)
 
     def close(self):
