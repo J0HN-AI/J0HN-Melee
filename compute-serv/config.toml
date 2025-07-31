@@ -36,6 +36,14 @@ critic_lr = 0.0003
 gae = 0.95
 policy_clip = 0.2
 
+[actor_model]
+hidden_layers = [256, 256, 256]
+activation = "ReLU"
+
+[critic_model]
+hidden_layers = [256, 256, 256]
+activation = "ReLU"
+
 [reward-settings]
 agent_punch_power_modifier = 1
 cpu_punch_power_modifier = 5
