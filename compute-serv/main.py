@@ -423,7 +423,7 @@ def get_logfiles(path:str, logs_filename:str, nb_instances:int, config:dict):
     instances_filtered = config["backup-logs"]["instances_filtered"]
 
     local_time = time.localtime()
-    csv_filename = logs_filename.replace("[d]", str(local_time.tm_mday)).replace("[m]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
+    csv_filename = logs_filename.replace("[d]", str(local_time.tm_mday)).replace("[mo]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
     
     for i in range(nb_instances):
         if instances_filter_mode == "WHITELIST":
