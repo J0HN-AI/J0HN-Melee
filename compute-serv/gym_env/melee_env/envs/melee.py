@@ -480,7 +480,7 @@ class MeleeEnv(gym.Env):
 
         return (game_time, stage, agent_character, agent_percent, agent_stock, cpu_character, cpu_percent, cpu_stock, frame)
 
-    def _calculate_reward(self, current_percent_agent, current_percent_cpu, current_frame, stock_agent, 
+    def _calculate_reward2(self, current_percent_agent, current_percent_cpu, current_frame, stock_agent, 
                           stock_cpu, agent_punch_power_modifier, cpu_punch_power_modifier, agent_combo_modifier, 
                           cpu_combo_modifier, sub_frame_damage_modifier, percent_modifier, agent_win_reward, 
                           cpu_win_reward, reward_set, reward_reducer, agent_reward_overflow, cpu_reward_overflow,
@@ -524,10 +524,10 @@ class MeleeEnv(gym.Env):
         total_reward = (reward_agent/agent_stock_penalty - reward_cpu/cpu_stock_penalty) - agent_idle_penalty
 
         if stock_agent < self.reward_memory["last_stock_agent"]:
-            total_reward = total_reward - cpu_win_reward / (percent_agent_no_0 / percent_modifier)
+            total_reward = float(cpu_win_reward)
         
         if stock_cpu < self.reward_memory["last_stock_cpu"]:
-            total_reward = total_reward + agent_win_reward / (percent_cpu_no_0 / percent_modifier)
+            total_reward =  float(agent_win_reward)
         
         self.reward_memory["last_percent_agent"] = current_percent_agent
         self.reward_memory["last_percent_cpu"] = current_percent_cpu
@@ -536,6 +536,26 @@ class MeleeEnv(gym.Env):
 
         return self._clamp(total_reward / reward_reducer, reward_set[0], reward_set[1])
 
+    def _calculate_reward(self, current_percent_agent, current_percent_cpu, stock_agent, stock_cpu, 
+                          cpu_win_reward, agent_win_reward, agent_percent_lost_penalty, cpu_lost_percent_bonus):
+        percent_agent_change = max(0, current_percent_agent - self.reward_memory["last_percent_agent"])
+        percent_cpu_change = max(0, current_percent_cpu - self.reward_memory["last_percent_cpu"])
+
+        total_reward = percent_cpu_change * cpu_lost_percent_bonus - percent_agent_change * agent_percent_lost_penalty
+
+        if stock_agent < self.reward_memory["last_stock_agent"]:
+            total_reward = float(cpu_win_reward)
+        
+        if stock_cpu < self.reward_memory["last_stock_cpu"]:
+            total_reward = float(agent_win_reward)
+
+        self.reward_memory["last_percent_agent"] = current_percent_agent
+        self.reward_memory["last_percent_cpu"] = current_percent_cpu
+        self.reward_memory["last_stock_agent"] = stock_agent
+        self.reward_memory["last_stock_cpu"] = stock_cpu
+
+        return total_reward
+    
     def reset(self, *, seed = None, options = None):
         super().reset(seed=seed)
 
@@ -564,26 +584,33 @@ class MeleeEnv(gym.Env):
         return observation, {"match_settings": self.match_settings}
     
     def step(self, action):
-        agent_punch_power_modifier = self.config["reward-settings"]["agent_punch_power_modifier"]
-        cpu_punch_power_modifier = self.config["reward-settings"]["cpu_punch_power_modifier"]
-        agent_combo_modifier = self.config["reward-settings"]["agent_combo_modifier"]
-        cpu_combo_modifier = self.config["reward-settings"]["cpu_combo_modifier"]
-        sub_frame_damage_modifier = self.config["reward-settings"]["sub_frame_damage_modifier"]
-        percent_modifier = self.config["reward-settings"]["percent_modifier"]
+        
+        #agent_punch_power_modifier = self.config["reward-settings"]["agent_punch_power_modifier"]
+        #cpu_punch_power_modifier = self.config["reward-settings"]["cpu_punch_power_modifier"]
+        #agent_combo_modifier = self.config["reward-settings"]["agent_combo_modifier"]
+        #cpu_combo_modifier = self.config["reward-settings"]["cpu_combo_modifier"]
+        #sub_frame_damage_modifier = self.config["reward-settings"]["sub_frame_damage_modifier"]
+        #percent_modifier = self.config["reward-settings"]["percent_modifier"]
+        #reward_set = self.config["reward-settings"]["reward_set"]
+        #agent_reward_overflow = self.config["reward-settings"]["agent_reward_overflow"]
+        #cpu_reward_overflow = self.config["reward-settings"]["cpu_reward_overflow"]
+        #reward_reducer = self.config["reward-settings"]["reward_reducer"]
+        #agent_percent_difference_modifier = self.config["reward-settings"]["agent_percent_difference_modifier"]
+        #cpu_percent_difference_modifier = self.config["reward-settings"]["cpu_percent_difference_modifier"]
+        #agent_idle_modifier = self.config["reward-settings"]["agent_idle_modifier"]
+        #agent_idle_penalty_start = self.config["reward-settings"]["agent_idle_penalty_start"]
+        #agent_winner_reward = self.config["reward-settings"]["agent_winner_reward"]
+        #cpu_winner_reward = self.config["reward-settings"]["cpu_winner_reward"]
+        #agent_stock_penalty_modifier = self.config["reward-settings"]["agent_stock_penalty_modifier"]
+        #cpu_stock_penalty_modifier = self.config["reward-settings"]["cpu_stock_penalty_modifier"]
+        
+
         agent_win_reward = self.config["reward-settings"]["agent_win_reward"]
         cpu_win_reward = self.config["reward-settings"]["cpu_win_reward"]
-        reward_set = self.config["reward-settings"]["reward_set"]
-        agent_reward_overflow = self.config["reward-settings"]["agent_reward_overflow"]
-        cpu_reward_overflow = self.config["reward-settings"]["cpu_reward_overflow"]
-        reward_reducer = self.config["reward-settings"]["reward_reducer"]
-        agent_percent_difference_modifier = self.config["reward-settings"]["agent_percent_difference_modifier"]
-        cpu_percent_difference_modifier = self.config["reward-settings"]["cpu_percent_difference_modifier"]
-        agent_idle_modifier = self.config["reward-settings"]["agent_idle_modifier"]
-        agent_idle_penalty_start = self.config["reward-settings"]["agent_idle_penalty_start"]
-        agent_winner_reward = self.config["reward-settings"]["agent_winner_reward"]
-        cpu_winner_reward = self.config["reward-settings"]["cpu_winner_reward"]
-        agent_stock_penalty_modifier = self.config["reward-settings"]["agent_stock_penalty_modifier"]
-        cpu_stock_penalty_modifier = self.config["reward-settings"]["cpu_stock_penalty_modifier"]
+        agent_percent_lost_penalty = self.config["reward-settings"]["agent_percent_lost_penalty"]
+        cpu_lost_percent_bonus = self.config["reward-settings"]["cpu_lost_percent_bonus"]
+        agent_winner_reward = 0
+        cpu_winner_reward = 0
 
         action_payload_char = "iiiiiiiiiiffffff"
         controller_action = self._action_to_controller(action)
@@ -606,19 +633,23 @@ class MeleeEnv(gym.Env):
         
         current_percent_agent = observation["agent"]["percent"]
         current_percent_cpu = observation["cpu"]["percent"]
-        current_frame = observation["frame"]
+        #current_frame = observation["frame"]
         stock_agent = observation["agent"]["stock"]
         stock_cpu = observation["cpu"]["stock"]
-        cpu_invulnerable = observation["cpu"]["invulnerable"]
+        #cpu_invulnerable = observation["cpu"]["invulnerable"]
         
         reward = 0
         if not done:
+            """
             reward = self._calculate_reward(current_percent_agent, current_percent_cpu, current_frame, stock_agent, 
                                 stock_cpu, agent_punch_power_modifier, cpu_punch_power_modifier, agent_combo_modifier, 
                                 cpu_combo_modifier, sub_frame_damage_modifier, percent_modifier, agent_win_reward, 
                                 cpu_win_reward, reward_set, reward_reducer, agent_reward_overflow, cpu_reward_overflow,
                                 agent_percent_difference_modifier, cpu_percent_difference_modifier, agent_idle_modifier,
                                 agent_idle_penalty_start, agent_stock_penalty_modifier, cpu_stock_penalty_modifier, bool(cpu_invulnerable))
+            """
+            reward = self._calculate_reward(current_percent_agent, current_percent_cpu, stock_agent, stock_cpu, 
+                                            cpu_win_reward, agent_win_reward, agent_percent_lost_penalty, cpu_lost_percent_bonus)
         else:
             if self.last_observation["agent"]["stock"] == 0:
                 reward = cpu_winner_reward

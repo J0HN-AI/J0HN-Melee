@@ -1,5 +1,5 @@
 [hardware-config]
-n_gpus = 2
+n_gpus = 1
 
 [network-config]
 HPC_ip = "172.16.1.32"
@@ -17,54 +17,59 @@ logger_port = 9000
 data_path = "/home/jul/Desktop/TEST" #/home/jul/NetDrives/AI-Storage/J0HNMELEE
 show_instances_id_as = "IP" #IP/PORT/ID
 save_logs_every = 0.5 #seconds
-csv_logs_filename = "J0HNMelee_[ID]_[d]:[m]:[y]"
+csv_logs_filename = "J0HNMelee_[ID]_[d].[mo].[y]"
 instances_filter_mode = "WHITELIST" # WHITELIST/BLACKLIST
 instances_filtered = [0] # instances id in the [instances] list
+weights_dir_name = "J0HNMelee_[d].[mo].[y]_[h]:[mi]:[s]"
+save_weights_every = 600 #seconds
+load_weights_on_startup = false
+weights_to_load = "LAST" #FIRST/LAST/(name of specific weights)
 
 [training-config]
-n_epochs = 40
-batch_size = 1024
-world_size = 24
-learn_steps = 30
+n_epochs = 15
+batch_size = 128
+learn_steps = 2048
 n_games = 50
-n_projectiles = 3
+n_projectiles = 5
 
 [agent]
-gamma = 0.999  
+gamma = 0.99
 actor_lr = 0.0003
 critic_lr = 0.0003
 gae = 0.95
 policy_clip = 0.2
 
 [actor_model]
-hidden_layers = [256, 256, 256]
+hidden_layers = [2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
 activation = "ReLU"
-
+ 
 [critic_model]
-hidden_layers = [256, 256, 256]
+hidden_layers = [2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
 activation = "ReLU"
 
 [reward-settings]
-agent_punch_power_modifier = 1
-cpu_punch_power_modifier = 5
-agent_combo_modifier = 30
-cpu_combo_modifier = 200
-sub_frame_damage_modifier = 0.001
-percent_modifier = 30
-agent_win_reward = 100000
-cpu_win_reward = 5000000
-agent_reward_overflow = 100000
-cpu_reward_overflow = 100000
-agent_percent_difference_modifier = 5
-cpu_percent_difference_modifier = 1
-agent_winner_reward = 100000
-cpu_winner_reward = -100000
-agent_idle_modifier = 0.5
-agent_idle_penalty_start = 180
-agent_stock_penalty_modifier = 1
-cpu_stock_penalty_modifier = 2.2
-reward_set = [-10000,10000]
-reward_reducer = 10
+#agent_punch_power_modifier = 1
+#cpu_punch_power_modifier = 7
+#agent_combo_modifier = 20
+#cpu_combo_modifier = 200
+#sub_frame_damage_modifier = 0.001
+#percent_modifier = 30
+#agent_reward_overflow = 100000
+#cpu_reward_overflow = 100000
+#agent_percent_difference_modifier = 5
+#cpu_percent_difference_modifier = 1
+#agent_winner_reward = 0
+#cpu_winner_reward = 0
+#agent_idle_modifier = 0.8
+#agent_idle_penalty_start = 60
+#agent_stock_penalty_modifier = 1
+#cpu_stock_penalty_modifier = 1.2
+#reward_set = [-50000,10000]
+#reward_reducer = 10
+agent_win_reward = 500
+cpu_win_reward = -500
+agent_percent_lost_penalty = 2
+cpu_lost_percent_bonus = 2
 
 [instances]
 
@@ -73,10 +78,10 @@ ip = "172.16.1.120"
 stage = "FINAL_DESTINATION"
 agent_character = "MARIO"
 cpu_character = "LUIGI"
-cpu_level = 9
+cpu_level = 1
 
-stage_change_rate = 2 # Changes stage every x games (0 for no change)
-agent_character_change_rate = 3 # Changes character every x games (0 for no change)
+stage_change_rate = 5 # Changes stage every x games (0 for no change)
+agent_character_change_rate = 10 # Changes character every x games (0 for no change)
 cpu_character_change_rate = 3 # Changes character every x games (0 for no change)
 minimum_games_berfore_changing_cpu_level = 3
 cpu_level_progression_rate = 0.6 # Changes cpu level when the AI V/D ratio is greater than this value (0 for no change)
