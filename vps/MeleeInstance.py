@@ -1,9 +1,12 @@
+import threading as th
 import melee
 import time
 import configparser
 import math
 import os
 import subprocess
+import enet
+import ubjson
 
 def platform_None_fix(platform):
     if platform == (None, None, None):
@@ -11,6 +14,10 @@ def platform_None_fix(platform):
     else:
         return platform
 
+def keep_alive_slippistream(console:melee.Console, stop:th.Event):
+    while not stop.is_set():
+        console._slippstream._host.service(1000)
+        
 class Melee:
     def __init__(self, agent_port, cpu_port, iso_path,
                   dolphin_path="/home/jul/.config/Slippi Launcher/netplay/squashfs-root/usr/bin", fullscreen=False, backend="Vulkan"):
@@ -20,6 +27,7 @@ class Melee:
         self.agent_port = agent_port
         self.cpu_port = cpu_port
         self.paused = False
+        self.keep_alive_event = th.Event()
 
         self.console = melee.Console(path=self._dolphin_path, fullscreen=self._fullscreen, gfx_backend=backend, disable_audio=True)
 
@@ -28,6 +36,7 @@ class Melee:
         self.cpu_controller = melee.Controller(console=self.console, port=self.cpu_port)
 
         self.console.connect()
+        self.keep_alive_process = th.Thread(target=keep_alive_slippistream, args=(self.console, self.keep_alive_event))
         print("Console connected")
 
         self.console.run(iso_path=self._iso_path)
@@ -305,6 +314,13 @@ class Melee:
                 self._release_all(controller)
                 return True
 
+    def _restart_slippistream(self):
+        self.console._slippstream.shutdown()
+        time.sleep(0.5)
+        self.console._slippstream = melee.SlippstreamClient(self.console.slippi_address, self.console.slippi_port, True)
+        time.sleep(0.5)
+        self.console._slippstream.connect()
+
     def game_init(self, stage, agent, cpu, cpu_level):
         self.paused = False
         self.stage = self._get_stage(stage)
@@ -314,7 +330,8 @@ class Melee:
         agent_character_chosen = False
         cpu_character_chosen = False
         stage_selected = False
-
+        
+        self._restart_slippistream()
         while True:
             gamestate = self.console.step()
             if gamestate.menu_state in [melee.Menu.IN_GAME, melee.Menu.SUDDEN_DEATH]:
@@ -348,6 +365,7 @@ class Melee:
 
     def pause(self):
         if not self.paused:
+            self.keep_alive_process.start()
             subprocess.run(["xdotool", "keydown", "F10"])
             time.sleep(0.1)
             subprocess.run(["xdotool", "keyup", "F10"])
@@ -355,6 +373,10 @@ class Melee:
 
     def resume(self):
         if self.paused:
+            self.keep_alive_event.set()
+            self.keep_alive_process.join()
+            self.keep_alive_event.clear()
+            self.keep_alive_process = th.Thread(target=keep_alive_slippistream, args=(self.console, self.keep_alive_event))
             subprocess.run(["xdotool", "keydown", "F10"])
             time.sleep(0.1)
             subprocess.run(["xdotool", "keyup", "F10"])
