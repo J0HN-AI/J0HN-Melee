@@ -4,14 +4,17 @@ import torch as T
 import torch.optim as optim
 import torch.distributed as distrib
 import torch.multiprocessing as mp
-import gymnasium as gym
 from torch.distributions import Beta
 from torch.nn.parallel import DistributedDataParallel as DDP
-from tqdm import tqdm
+import gymnasium as gym
+from gymnasium.wrappers import FlattenObservation
+import pandas as pd
 
 import tomli
 import pathlib
 import os
+import gym_env.melee_env
+import time
 
 class PPOMemory:
     def __init__(self, batch_size):
@@ -65,14 +68,20 @@ class ActorNetwork(nn.Module):
         
         activation_name = config["actor_model"]["activation"]
         hidden_layers = config["actor_model"]["hidden_layers"]
+        add_LayerNorm = config["actor_model"]["add_LayerNorm"]
+
         hidden_input_size = hidden_layers[0]
         
         layers = []
         layers.append(nn.Linear(*input_dims, hidden_input_size))
+        if add_LayerNorm:
+            layers.append(nn.LayerNorm(hidden_input_size))
         layers.append(activation_fcts[activation_name]())
         
         for layer_size in hidden_layers:
             layers.append(nn.Linear(hidden_input_size, layer_size))
+            if add_LayerNorm:
+                layers.append(nn.LayerNorm(layer_size))
             layers.append(activation_fcts[activation_name]())
             hidden_input_size = layer_size
 
@@ -82,8 +91,15 @@ class ActorNetwork(nn.Module):
 
     def forward(self, state):
         x = self.shared(state)
-        alpha = self.alpha_head(x) + 1e-5 
-        beta = self.beta_head(x) + 1e-5
+
+        alpha = T.clamp(self.alpha_head(x), min=1e-5, max=20) 
+        beta = T.clamp(self.beta_head(x), min=1e-5, max=20)
+
+        if not T.isfinite(alpha).all():
+            alpha = T.nan_to_num(alpha)
+        
+        if not T.isfinite(beta).all():
+            beta = T.nan_to_num(beta)
 
         return Beta(alpha, beta)
 
@@ -101,14 +117,20 @@ class CriticNetwork(nn.Module):
         
         activation_name = config["critic_model"]["activation"]
         hidden_layers = config["critic_model"]["hidden_layers"]
+        add_LayerNorm = config["actor_model"]["add_LayerNorm"]
+
         hidden_input_size = hidden_layers[0]
         
         layers = []
         layers.append(nn.Linear(*input_dims, hidden_input_size))
+        if add_LayerNorm:
+            layers.append(nn.LayerNorm(hidden_input_size))
         layers.append(activation_fcts[activation_name]())
         
         for layer_size in hidden_layers:
             layers.append(nn.Linear(hidden_input_size, layer_size))
+            if add_LayerNorm:
+                layers.append(nn.LayerNorm(layer_size))
             layers.append(activation_fcts[activation_name]())
             hidden_input_size = layer_size
         
@@ -121,12 +143,87 @@ class CriticNetwork(nn.Module):
 
         return value
 
+def save_weights(actor, critic, config:dict, last=False):
+    weights_dir_name = str(config["backup-logs"]["weights_dir_name"])
+    data_path = config["backup-logs"]["data_path"]
 
-def remember(memory, state, action, probs, vals, reward, done):
+    local_time = time.localtime()
+    weights_dir_name = weights_dir_name.replace("[d]", str(local_time.tm_mday)).replace("[mo]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
+    weights_dir_name = weights_dir_name.replace("[h]", str(local_time.tm_hour)).replace("[mi]", str(local_time.tm_min)).replace("[s]", str(local_time.tm_sec))
+    
+    if last:
+        weights_dir_name += "_LAST"
+
+    os.makedirs(f"{data_path}/backup/{weights_dir_name}", exist_ok=True)
+    T.save(actor, f"{data_path}/backup/{weights_dir_name}/actor.pt")
+    T.save(critic, f"{data_path}/backup/{weights_dir_name}/critic.pt")
+
+def load_weights(actor:ActorNetwork, critic:CriticNetwork, config:dict):
+    data_path = config["backup-logs"]["data_path"]
+    weights_to_load = config["backup-logs"]["weights_to_load"]
+
+    list_subdirs = [file for file in os.scandir(f"{data_path}/backup") if file.is_dir()]
+
+    if list_subdirs == []:
+        return actor, critic
+    else:
+        if weights_to_load == "LAST":
+            weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=True)[0]
+
+            actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", weights_only=True))
+            critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", weights_only=True))
+
+            return actor, critic
+        elif weights_to_load == "FIRST":
+            weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=False)[1]
+
+            actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", weights_only=True))
+            critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", weights_only=True))
+
+            return actor, critic
+        else:
+            if os.path.exists(f"{data_path}/backup/{weights_to_load}"):
+                actor.load_state_dict(T.load(f"{data_path}/backup/{weights_to_load}/actor.pt", weights_only=True))
+                critic.load_state_dict(T.load(f"{data_path}/backup/{weights_to_load}/critic.pt", weights_only=True))
+
+                return actor, critic
+            else:
+                print("Weights not found; check your PATH. Using LAST weights instead")
+                weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=True)[0]
+
+                actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", weights_only=True))
+                critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", weights_only=True))
+
+                return actor, critic
+
+def save_score_history_csv(config:dict, score_history:list, rank:int):
+    data_path = config["backup-logs"]["data_path"]
+    score_history_csv_name = config["backup-logs"]["score_history_csv_name"]
+    n_games = config["training-config"]["n_games"]
+
+    local_time = time.localtime()
+    score_history_csv_name = score_history_csv_name.replace("[d]", str(local_time.tm_mday)).replace("[mo]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
+    score_history_csv_name = score_history_csv_name.replace("[h]", str(local_time.tm_hour)).replace("[mi]", str(local_time.tm_min)).replace("[s]", str(local_time.tm_sec))
+    
+    csv_path = f"{data_path}/logs/{score_history_csv_name}.csv"
+
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df[f"RANK_{rank}"] = score_history[:n_games]
+
+        with open(csv_path, "w", newline="") as f:
+            df.to_csv(f, index=False)
+    else:
+        df = pd.DataFrame({f"RANK_{rank}": score_history[:n_games]})
+
+        with open(csv_path, "w", newline="") as f:
+            df.to_csv(f, index=False)
+
+def remember(memory:PPOMemory, state, action, probs, vals, reward, done):
     memory.store_memory(state, action, probs, vals, reward, done)
             
 def choose_action(observation, gpu, actor, critic):
-    state = T.tensor([np.array(observation).tolist()], dtype=T.float).cuda(gpu, non_blocking=True)
+    state = T.tensor([np.array(observation).tolist()]).cuda(gpu, non_blocking=True)
 
     dist = actor(state)
     value = critic(state)
@@ -136,10 +233,10 @@ def choose_action(observation, gpu, actor, critic):
 
     return buttons_action, probs.item(), value.item()
 
-def learn(gpu, actor, actor_optim, critic, critic_optim, memory:PPOMemory, config, rank, progress_bar, sync_loops, scaler):
+def learn(gpu, actor, actor_optim, critic, critic_optim, memory:PPOMemory, config:dict, sync_loops:T.Tensor, scaler:T.amp.GradScaler, env):
     for i in range(config["training-config"]["n_epochs"]):
-        if rank == 0:
-            progress_bar.update(1)
+        env.unwrapped.send_logs(epoch=i+1, max_epoch=config["training-config"]["n_epochs"], learn_mode=True, done=False)
+
         state_arr, action_arr, old_prob_arr, vals_arr, reward_arr, dones_arr, batches = memory.generate_batches()
 
         values = vals_arr
@@ -181,33 +278,41 @@ def learn(gpu, actor, actor_optim, critic, critic_optim, memory:PPOMemory, confi
                 break
 
             scaler.scale(total_loss).backward()
+
+            scaler.unscale_(actor_optim)
+            scaler.unscale_(critic_optim)
+
+            nn.utils.clip_grad_norm_(actor.parameters(), max_norm=config["agent"]["gradient_clip"])
+            nn.utils.clip_grad_norm_(critic.parameters(), max_norm=config["agent"]["gradient_clip"])
+
             scaler.step(actor_optim)
             scaler.step(critic_optim)
             scaler.update()
+
             actor_optim.zero_grad()
             critic_optim.zero_grad()
 
     memory.clear_memory()
 
-def workers(gpu, rank_node, config, sync_loops):
-    global progress_bar
-    progress_bar = "ola"
+def workers(gpu, rank_node, config:dict, sync_loops:T.Tensor, stop_ppo:T.Tensor):
     rank = rank_node * config["hardware-config"]["n_gpus"] + gpu
-    if rank == 0:
-        progress_bar = tqdm(total=config["training-config"]["n_epochs"])
 
-    distrib.init_process_group(backend="gloo", init_method="env://", world_size=config["training-config"]["world_size"], rank=rank)
+    distrib.init_process_group(backend="gloo", init_method="env://", world_size=len(config["instances"]), rank=rank)
     T.cuda.set_device(gpu)
-    env = gym.make("CartPole-v1")
+    env = FlattenObservation(gym.make('melee_env/MeleeEnv-v0', config=config, rank=rank, debug=True, disable_env_checker=True))
 
     memory = PPOMemory(config["training-config"]["batch_size"])
 
-    actor = ActorNetwork(env.action_space.n, env.observation_space.shape)
+    actor = ActorNetwork(env.action_space.shape[0], env.observation_space.shape, config)
     actor.cuda(gpu)
-    actor_optim = optim.Adam(actor.parameters(), config["agent"]["actor_lr"])
     
-    critic = CriticNetwork(env.observation_space.shape)
+    critic = CriticNetwork(env.observation_space.shape, config)
     critic.cuda(gpu)
+
+    if config["backup-logs"]["load_weights_on_startup"]:
+        actor, critic = load_weights(actor, critic, config)
+
+    actor_optim = optim.Adam(actor.parameters(), config["agent"]["actor_lr"])
     critic_optim = optim.Adam(critic.parameters(), config["agent"]["critic_lr"])
 
     actor = DDP(actor, device_ids=[gpu])
@@ -221,7 +326,8 @@ def workers(gpu, rank_node, config, sync_loops):
     n_steps = 0
     game = 0
 
-    while (not T.all(sync_loops >= config["training-config"]["n_games"]).item()):
+    while (not T.all(sync_loops >= config["training-config"]["n_games"]).item()) and stop_ppo.item() == 0:
+        now = time.time()
         observation, info = env.reset()
         game += 1
         done = False
@@ -232,42 +338,54 @@ def workers(gpu, rank_node, config, sync_loops):
             observation_, reward, term, trunc, info = env.step(action)
             done = term or trunc
             n_steps += 1
-            score += reward
+            score += np.array(reward).item()
 
-            remember(memory, observation, action, prob, val, reward, done)
+            remember(memory, observation, action, prob, val, np.array(reward).item(), done)
 
             if (n_steps % config["training-config"]["learn_steps"] == 0):
-                if rank == 0:
-                    progress_bar.reset()
-                learn(gpu, actor, actor_optim, critic, critic_optim, memory, config, rank, progress_bar, sync_loops, scaler)
+                env.unwrapped.pause_game()
+                learn(gpu, actor, actor_optim, critic, critic_optim, memory, config, sync_loops, scaler, env)
+                env.unwrapped.resume_game()
                 learn_iters += 1
                 
             observation = observation_
+            env.unwrapped.send_logs(game, score, avg_score, learn_iters, learn_mode=False, done=done)
         score_history.append(score)
-        avg_score = np.mean(score_history[-100:])
+        avg_score = np.mean(score_history)
         sync_loops[0][rank] = game
         
-
         if rank == 0:
-            print('episode', game, 'score %.1f' % score, 'avg score %.1f' % avg_score, 'time_steps', n_steps, 'learning_steps', learn_iters)
+            if (now + config["backup-logs"]["save_weights_every"]) <= time.time():
+                now = time.time()
+                save_weights(actor, critic, config)
+    
 
     if rank == 0:
-        T.save(actor, "./actor.pt")
-        T.save(critic, "./critic.pt")
+        save_weights(actor, critic, config, True)
+    save_score_history_csv(config, score_history, rank)
+    
+    env.close()
     distrib.destroy_process_group()
 
-def train(config):
+def setup_envs(config:dict, stop_ppo:T.Tensor):
     network_config = config["network-config"]
     n_gpus = config["hardware-config"]["n_gpus"]
+    world_size = len(config["instances"])
+
+    sync_loops = T.full((1, world_size), 0).share_memory_()
+    nodes = world_size // n_gpus
+    
     os.environ['MASTER_ADDR'] = network_config["DDP_ip"]              
     os.environ['MASTER_PORT'] = str(network_config["DDP_port"])
-    sync_loops = T.full((1, config["training-config"]["world_size"]), 0).share_memory_()
 
-    nodes = config["training-config"]["world_size"] // n_gpus
     for rank_node in range(nodes):
-        p = mp.Process(target=lambda rank_node, n_gpus, config, sync_loops: (mp.spawn(workers, nprocs=n_gpus, args=(rank_node, config, sync_loops))), args=(rank_node, n_gpus, config, sync_loops))
+        p = mp.Process(target=lambda rank_node, n_gpus, config, sync_loops, stop_ppo: (mp.spawn(workers, nprocs=n_gpus, args=(rank_node, config, sync_loops, stop_ppo))), args=(rank_node, n_gpus, config, sync_loops, stop_ppo))
         p.start()
    
 if __name__ == "__main__":
     config = tomli.load(open(f"{pathlib.Path(__file__).parent.resolve()}/config.toml", "rb"))
-    train(config)
+    stop_ppo = T.tensor([0]).share_memory_()
+    try:
+        setup_envs(config, stop_ppo)
+    except KeyboardInterrupt:
+        stop_ppo[0] = 1
