@@ -1,0 +1,8 @@
+pyfiglet
+halo
+rich
+pandas
+tomli
+numpy
+gymnasium
+torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
