@@ -21,9 +21,10 @@ csv_logs_filename = "J0HNMelee_[ID]_[d].[mo].[y]"
 instances_filter_mode = "WHITELIST" # WHITELIST/BLACKLIST
 instances_filtered = [0] # instances id in the [instances] list
 weights_dir_name = "J0HNMelee_[d].[mo].[y]_[h]:[mi]:[s]"
-save_weights_every = 600 #seconds
+save_weights_every = 3600 #seconds
 load_weights_on_startup = false
-weights_to_load = "LAST" #FIRST/LAST/(name of specific weights)
+weights_to_load = "LAST" #FIRST/LAST/(name of specific weights)$
+score_history_csv_name = "SCORE_HISTORY_J0HNMelee_[d].[mo].[y]_[h]:[mi]:[s]"
 
 [training-config]
 n_epochs = 15
@@ -38,13 +39,16 @@ actor_lr = 0.0003
 critic_lr = 0.0003
 gae = 0.95
 policy_clip = 0.2
+gradient_clip = 0.5
 
 [actor_model]
-hidden_layers = [2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
+hidden_layers = [4096, 4096, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
+add_LayerNorm = true
 activation = "ReLU"
  
 [critic_model]
-hidden_layers = [2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
+hidden_layers = [4096, 4096, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
+add_LayerNorm = true
 activation = "ReLU"
 
 [reward-settings]
