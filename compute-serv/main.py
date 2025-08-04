@@ -423,9 +423,9 @@ def get_logfiles(path:str, logs_filename:str, nb_instances:int, config:dict):
     instances_filtered = config["backup-logs"]["instances_filtered"]
 
     local_time = time.localtime()
-    csv_filename = logs_filename.replace("[d]", str(local_time.tm_mday)).replace("[mo]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
     
     for i in range(nb_instances):
+        csv_filename = logs_filename.replace("[d]", str(local_time.tm_mday)).replace("[mo]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
         if instances_filter_mode == "WHITELIST":
             if i not in instances_filtered:
                 continue
@@ -455,7 +455,7 @@ def get_logfiles(path:str, logs_filename:str, nb_instances:int, config:dict):
         else: # ID
             log_files_buffer[str(i)] = log_file_buffer
 
-        return log_files_buffer
+    return log_files_buffer
 
 def close_logfiles(log_files_buffer:dict):
     for buffer in log_files_buffer.values():
