@@ -325,9 +325,9 @@ def workers(gpu, rank_node, config:dict, sync_loops:T.Tensor, stop_ppo:T.Tensor)
     avg_score = 0
     n_steps = 0
     game = 0
+    now = time.time()
 
     while (not T.all(sync_loops >= config["training-config"]["n_games"]).item()) and stop_ppo.item() == 0:
-        now = time.time()
         observation, info = env.reset()
         game += 1
         done = False
