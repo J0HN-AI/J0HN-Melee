@@ -66,9 +66,9 @@ class ActorNetwork(nn.Module):
             "Softplus": nn.Softplus
         }
         
-        activation_name = config["actor_model"]["activation"]
-        hidden_layers = config["actor_model"]["hidden_layers"]
-        add_LayerNorm = config["actor_model"]["add_LayerNorm"]
+        activation_name = config["actor-model"]["activation"]
+        hidden_layers = config["actor-model"]["hidden_layers"]
+        add_LayerNorm = config["actor-model"]["add_LayerNorm"]
 
         hidden_input_size = hidden_layers[0]
         
@@ -115,9 +115,9 @@ class CriticNetwork(nn.Module):
             "Softplus": nn.Softplus
         }
         
-        activation_name = config["critic_model"]["activation"]
-        hidden_layers = config["critic_model"]["hidden_layers"]
-        add_LayerNorm = config["actor_model"]["add_LayerNorm"]
+        activation_name = config["critic-model"]["activation"]
+        hidden_layers = config["critic-model"]["hidden_layers"]
+        add_LayerNorm = config["critic-model"]["add_LayerNorm"]
 
         hidden_input_size = hidden_layers[0]
         
@@ -155,10 +155,10 @@ def save_weights(actor, critic, config:dict, last=False):
         weights_dir_name += "_LAST"
 
     os.makedirs(f"{data_path}/backup/{weights_dir_name}", exist_ok=True)
-    T.save(actor, f"{data_path}/backup/{weights_dir_name}/actor.pt")
-    T.save(critic, f"{data_path}/backup/{weights_dir_name}/critic.pt")
+    T.save(actor.state_dict(), f"{data_path}/backup/{weights_dir_name}/actor.pt")
+    T.save(critic.state_dict(), f"{data_path}/backup/{weights_dir_name}/critic.pt")
 
-def load_weights(actor:ActorNetwork, critic:CriticNetwork, config:dict):
+def load_weights(actor:ActorNetwork, critic:CriticNetwork, config:dict, gpu:int):
     data_path = config["backup-logs"]["data_path"]
     weights_to_load = config["backup-logs"]["weights_to_load"]
 
@@ -170,33 +170,92 @@ def load_weights(actor:ActorNetwork, critic:CriticNetwork, config:dict):
         if weights_to_load == "LAST":
             weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=True)[0]
 
-            actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", weights_only=True))
-            critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", weights_only=True))
+            actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", map_location=f"cuda:{gpu}"))
+            critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", map_location=f"cuda:{gpu}"))
 
             return actor, critic
         elif weights_to_load == "FIRST":
             weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=False)[1]
 
-            actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", weights_only=True))
-            critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", weights_only=True))
+            actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", map_location=f"cuda:{gpu}"))
+            critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", map_location=f"cuda:{gpu}"))
 
             return actor, critic
         else:
             if os.path.exists(f"{data_path}/backup/{weights_to_load}"):
-                actor.load_state_dict(T.load(f"{data_path}/backup/{weights_to_load}/actor.pt", weights_only=True))
-                critic.load_state_dict(T.load(f"{data_path}/backup/{weights_to_load}/critic.pt", weights_only=True))
+                actor.load_state_dict(T.load(f"{data_path}/backup/{weights_to_load}/actor.pt", map_location=f"cuda:{gpu}"))
+                critic.load_state_dict(T.load(f"{data_path}/backup/{weights_to_load}/critic.pt", map_location=f"cuda:{gpu}"))
 
                 return actor, critic
             else:
                 print("Weights not found; check your PATH. Using LAST weights instead")
                 weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=True)[0]
 
-                actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", weights_only=True))
-                critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", weights_only=True))
+                actor.load_state_dict(T.load(f"{weights_dir.path}/actor.pt", map_location=f"cuda:{gpu}"))
+                critic.load_state_dict(T.load(f"{weights_dir.path}/critic.pt", map_location=f"cuda:{gpu}"))
 
                 return actor, critic
 
-def save_score_history_csv(config:dict, score_history:list, rank:int):
+def save_checkpoint(actor, critic, actor_optim, critic_optim, scaler, config:dict, last=False):
+    checkpoint_dir_name = str(config["backup-logs"]["checkpoint_dir_name"])
+    data_path = config["backup-logs"]["data_path"]
+
+    local_time = time.localtime()
+    checkpoint_dir_name = checkpoint_dir_name.replace("[d]", str(local_time.tm_mday)).replace("[mo]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
+    checkpoint_dir_name = checkpoint_dir_name.replace("[h]", str(local_time.tm_hour)).replace("[mi]", str(local_time.tm_min)).replace("[s]", str(local_time.tm_sec))
+    
+    if last:
+        checkpoint_dir_name += "_LAST"
+
+    os.makedirs(f"{data_path}/checkpoints/{checkpoint_dir_name}", exist_ok=True)
+
+    model_ckpt = {
+        "actor_model": actor.state_dict(),
+        "critic_model": critic.state_dict(),
+        "actor_optim": actor_optim.state_dict(),
+        "critic_optim": critic_optim.state_dict(),
+        "grad_scaler": scaler.state_dict(),
+    }
+
+    T.save(model_ckpt, f"{data_path}/checkpoints/{checkpoint_dir_name}/checkpoint.pt")
+
+def load_checkpoint(actor:ActorNetwork, critic:CriticNetwork, actor_optim:optim.Adam, critic_optim:optim.Adam, scaler:T.amp.GradScaler, config:dict, gpu:int):
+    data_path = config["backup-logs"]["data_path"]
+    checkpoint_to_load = config["backup-logs"]["checkpoint_to_load"]
+
+    list_subdirs = [file for file in os.scandir(f"{data_path}/checkpoints") if file.is_dir()]
+    
+    model_ckpt = None
+
+    if list_subdirs == []:
+        return actor, critic, actor_optim, critic_optim, scaler
+    else:
+        if checkpoint_to_load == "LAST":
+            weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=True)[0]
+
+            model_ckpt = T.load(f"{weights_dir.path}/checkpoint.pt", map_location=f"cuda:{gpu}")
+        elif checkpoint_to_load == "FIRST":
+            weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=False)[1]
+
+            model_ckpt = T.load(f"{weights_dir.path}/checkpoint.pt", map_location=f"cuda:{gpu}")
+        else:
+            if os.path.exists(f"{data_path}/checkpoints/{checkpoint_to_load}"):
+                model_ckpt = T.load(f"{data_path}/checkpoints/{checkpoint_to_load}/checkpoint.pt", map_location=f"cuda:{gpu}")
+            else:
+                print("Weights not found; check your PATH. Using LAST weights instead")
+                weights_dir = sorted(list_subdirs, key=lambda folder: folder.stat().st_mtime, reverse=True)[0]
+
+                model_ckpt = T.load(f"{weights_dir.path}/checkpoint.pt", map_location=f"cuda:{gpu}")
+
+    actor.load_state_dict(model_ckpt["actor_model"])
+    critic.load_state_dict(model_ckpt["critic_model"])
+    actor_optim.load_state_dict(model_ckpt["actor_optim"])
+    critic_optim.load_state_dict(model_ckpt["critic_optim"])
+    scaler.load_state_dict(model_ckpt["grad_scaler"])
+
+    return actor, critic, actor_optim, critic_optim, scaler
+
+def save_score_history_csv(config:dict, score_history:list, rank:int, checkpoint=False):
     data_path = config["backup-logs"]["data_path"]
     score_history_csv_name = config["backup-logs"]["score_history_csv_name"]
     n_games = config["training-config"]["n_games"]
@@ -205,7 +264,11 @@ def save_score_history_csv(config:dict, score_history:list, rank:int):
     score_history_csv_name = score_history_csv_name.replace("[d]", str(local_time.tm_mday)).replace("[mo]", str(local_time.tm_mon)).replace("[y]", str(local_time.tm_year))
     score_history_csv_name = score_history_csv_name.replace("[h]", str(local_time.tm_hour)).replace("[mi]", str(local_time.tm_min)).replace("[s]", str(local_time.tm_sec))
     
-    csv_path = f"{data_path}/logs/{score_history_csv_name}.csv"
+    csv_path = ""
+    if checkpoint:
+        csv_path = f"{data_path}/checkpoints/R{rank}_{score_history_csv_name}.csv"
+    else:
+        csv_path = f"{data_path}/logs/{score_history_csv_name}.csv"
 
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
@@ -235,6 +298,7 @@ def choose_action(observation, gpu, actor, critic):
 
 def learn(gpu, actor, actor_optim, critic, critic_optim, memory:PPOMemory, config:dict, sync_loops:T.Tensor, scaler:T.amp.GradScaler, env):
     for i in range(config["training-config"]["n_epochs"]):
+        distrib.barrier()
         env.unwrapped.send_logs(epoch=i+1, max_epoch=config["training-config"]["n_epochs"], learn_mode=True, done=False)
 
         state_arr, action_arr, old_prob_arr, vals_arr, reward_arr, dones_arr, batches = memory.generate_batches()
@@ -274,9 +338,6 @@ def learn(gpu, actor, actor_optim, critic, critic_optim, memory:PPOMemory, confi
 
                 total_loss = actor_loss + 0.5*critic_loss
 
-            if T.all(sync_loops >= config["training-config"]["n_games"]).item():
-                break
-
             scaler.scale(total_loss).backward()
 
             scaler.unscale_(actor_optim)
@@ -292,9 +353,11 @@ def learn(gpu, actor, actor_optim, critic, critic_optim, memory:PPOMemory, confi
             actor_optim.zero_grad()
             critic_optim.zero_grad()
 
+    env.unwrapped.send_logs(epoch=-1, max_epoch=config["training-config"]["n_epochs"], learn_mode=True, done=False)
     memory.clear_memory()
+    distrib.barrier()
 
-def workers(gpu, rank_node, config:dict, sync_loops:T.Tensor, stop_ppo:T.Tensor):
+def workers(gpu, rank_node, config:dict, sync_loops:T.Tensor, stop_ppo:T.Tensor, sync_steps:T.Tensor, sync_save_checkpoint:T.Tensor):
     rank = rank_node * config["hardware-config"]["n_gpus"] + gpu
 
     distrib.init_process_group(backend="gloo", init_method="env://", world_size=len(config["instances"]), rank=rank)
@@ -309,23 +372,38 @@ def workers(gpu, rank_node, config:dict, sync_loops:T.Tensor, stop_ppo:T.Tensor)
     critic = CriticNetwork(env.observation_space.shape, config)
     critic.cuda(gpu)
 
-    if config["backup-logs"]["load_weights_on_startup"]:
-        actor, critic = load_weights(actor, critic, config)
+    if config["backup-logs"]["load_weights_on_startup"] and not config["backup-logs"]["load_checkpoint_on_startup"]:
+        actor, critic = load_weights(actor, critic, config, gpu)
+        distrib.barrier()
+        print(f"Loaded weights Rank:{rank}")
 
     actor_optim = optim.Adam(actor.parameters(), config["agent"]["actor_lr"])
     critic_optim = optim.Adam(critic.parameters(), config["agent"]["critic_lr"])
+    scaler = T.amp.GradScaler("cuda")
 
+    if config["backup-logs"]["load_checkpoint_on_startup"]:
+        actor, critic, actor_optim, critic_optim, scaler = load_checkpoint(actor, critic, actor_optim, critic_optim, scaler, config, gpu)
+        distrib.barrier()
+        print(f"Loaded weights Rank:{rank}")
+    
+    if rank == 0:
+        total_actor = sum(pa.numel() for pa in actor.parameters())
+        total_critic = sum(pc.numel() for pc in critic.parameters())
+        print(f"Total ACTOR parameters: {total_actor}")
+        print(f"Total CRITIC parameters: {total_critic}")
+    
     actor = DDP(actor, device_ids=[gpu])
     critic = DDP(critic, device_ids=[gpu])
-    scaler = T.amp.GradScaler("cuda")
 
     score_history = []
 
     learn_iters = 0
     avg_score = 0
     n_steps = 0
+    sync_steps[0][rank] = 0
     game = 0
-    now = time.time()
+    now_weights = time.time()
+    now_checkpoint = time.time()
 
     while (not T.all(sync_loops >= config["training-config"]["n_games"]).item()) and stop_ppo.item() == 0:
         observation, info = env.reset()
@@ -338,13 +416,39 @@ def workers(gpu, rank_node, config:dict, sync_loops:T.Tensor, stop_ppo:T.Tensor)
             observation_, reward, term, trunc, info = env.step(action)
             done = term or trunc
             n_steps += 1
+            sync_steps[0][rank] += 1
             score += np.array(reward).item()
 
             remember(memory, observation, action, prob, val, np.array(reward).item(), done)
 
             if (n_steps % config["training-config"]["learn_steps"] == 0):
                 env.unwrapped.pause_game()
+                while True:
+                    if T.all(sync_steps % config["training-config"]["learn_steps"] == 0).item() and T.all(sync_steps != 0).item():
+                        break
+                
                 learn(gpu, actor, actor_optim, critic, critic_optim, memory, config, sync_loops, scaler, env)
+
+                if (now_weights + config["backup-logs"]["save_weights_every"]) <= time.time():
+                    now_weights = time.time()
+                    if rank == 0:
+                        print("SAVING WEIGHTS !!!!")
+                        save_weights(actor.module, critic.module, config)
+                
+                if (now_checkpoint + config["backup-logs"]["save_checkpoint_every"]) <= time.time():
+                    now_checkpoint = time.time()
+                    sync_save_checkpoint[0] = 0
+                    if rank == 0:
+                        print("SAVING CHECKPOINT !!!!")
+                        save_checkpoint(actor.module, critic.module, actor_optim, critic_optim, scaler, config)
+                        save_score_history_csv(config, score_history, rank, True)
+                        sync_save_checkpoint[0] = 1
+                    else:
+                        save_score_history_csv(config, score_history, rank, True)
+                        while True:
+                            if sync_save_checkpoint[0].item() == 1:
+                                break
+                            
                 env.unwrapped.resume_game()
                 learn_iters += 1
                 
@@ -353,15 +457,10 @@ def workers(gpu, rank_node, config:dict, sync_loops:T.Tensor, stop_ppo:T.Tensor)
         score_history.append(score)
         avg_score = np.mean(score_history)
         sync_loops[0][rank] = game
-        
-        if rank == 0:
-            if (now + config["backup-logs"]["save_weights_every"]) <= time.time():
-                now = time.time()
-                save_weights(actor, critic, config)
     
 
     if rank == 0:
-        save_weights(actor, critic, config, True)
+        save_weights(actor.module, critic.module, config, True)
     save_score_history_csv(config, score_history, rank)
     
     env.close()
@@ -373,13 +472,17 @@ def setup_envs(config:dict, stop_ppo:T.Tensor):
     world_size = len(config["instances"])
 
     sync_loops = T.full((1, world_size), 0).share_memory_()
+    sync_steps = T.full((1, world_size), 0).share_memory_()
+    sync_save_checkpoint = T.Tensor([0]).share_memory_()
     nodes = world_size // n_gpus
     
     os.environ['MASTER_ADDR'] = network_config["DDP_ip"]              
     os.environ['MASTER_PORT'] = str(network_config["DDP_port"])
 
     for rank_node in range(nodes):
-        p = mp.Process(target=lambda rank_node, n_gpus, config, sync_loops, stop_ppo: (mp.spawn(workers, nprocs=n_gpus, args=(rank_node, config, sync_loops, stop_ppo))), args=(rank_node, n_gpus, config, sync_loops, stop_ppo))
+        p = mp.Process(target=lambda rank_node, n_gpus, config, sync_loops, stop_ppo, sync_steps, sync_save_checkpoint: 
+                       (mp.spawn(workers, nprocs=n_gpus, args=(rank_node, config, sync_loops, stop_ppo, sync_steps, sync_save_checkpoint))), 
+                       args=(rank_node, n_gpus, config, sync_loops, stop_ppo, sync_steps, sync_save_checkpoint))
         p.start()
    
 if __name__ == "__main__":

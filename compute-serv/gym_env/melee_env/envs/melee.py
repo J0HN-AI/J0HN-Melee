@@ -180,18 +180,18 @@ class MeleeEnv(gym.Env):
             "agent": sp.Dict({
                 "character": sp.Discrete(25),
                 "position": sp.Box(low=np.array([-255.0, -255.0]), high=np.array([255.0, 255.0]), dtype=np.float32),
-                "percent": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
+                "percent": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
                 "shield_strenght": sp.Box(low=0.0, high=60.0, shape=(1,), dtype=np.float32),
                 "is_powershield": sp.Discrete(2),
-                "stock": sp.Box(low=0, high=4, shape=(1,), dtype=np.int8),
+                "stock": sp.Box(low=0, high=4, shape=(1,), dtype=np.int32),
                 "facing": sp.Discrete(2),
-                "action_frame": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
+                "action_frame": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
                 "action_id": sp.Box(low=0, high=65536, shape=(1,), dtype=np.int32),
                 "invulnerable": sp.Discrete(2),
-                "invulnerability_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
-                "hitlag_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
-                "hitstun_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
-                "jumps_left": sp.Box(low=0, high=127, shape=(1,), dtype=np.int8),
+                "invulnerability_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
+                "hitlag_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
+                "hitstun_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
+                "jumps_left": sp.Box(low=0, high=127, shape=(1,), dtype=np.int32),
                 "on_ground": sp.Discrete(2),
                 "speed_air_x": sp.Box(low=-32768, high=32767, shape=(1,), dtype=np.float32),
                 "speed_y": sp.Box(low=-32768, high=32767, shape=(1,), dtype=np.float32),
@@ -210,18 +210,18 @@ class MeleeEnv(gym.Env):
             "cpu": sp.Dict({
                 "character": sp.Discrete(25),
                 "position": sp.Box(low=np.array([-255.0, -255.0]), high=np.array([255.0, 255.0]), dtype=np.float32),
-                "percent": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
+                "percent": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
                 "shield_strenght": sp.Box(low=0.0, high=60.0, shape=(1,), dtype=np.float32),
                 "is_powershield": sp.Discrete(2),
-                "stock": sp.Box(low=0, high=4, shape=(1,), dtype=np.int8),
+                "stock": sp.Box(low=0, high=4, shape=(1,), dtype=np.int32),
                 "facing": sp.Discrete(2),
-                "action_frame": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
+                "action_frame": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
                 "action_id": sp.Box(low=0, high=65536, shape=(1,), dtype=np.int32),
                 "invulnerable": sp.Discrete(2),
-                "invulnerability_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
-                "hitlag_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
-                "hitstun_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int16),
-                "jumps_left": sp.Box(low=0, high=127, shape=(1,), dtype=np.int8),
+                "invulnerability_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
+                "hitlag_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
+                "hitstun_left": sp.Box(low=0, high=32767, shape=(1,), dtype=np.int32),
+                "jumps_left": sp.Box(low=0, high=127, shape=(1,), dtype=np.int32),
                 "on_ground": sp.Discrete(2),
                 "speed_air_x": sp.Box(low=-32768, high=32767, shape=(1,), dtype=np.float32),
                 "speed_y": sp.Box(low=-32768, high=32767, shape=(1,), dtype=np.float32),
@@ -248,7 +248,7 @@ class MeleeEnv(gym.Env):
         self._connect_to_logger()
 
     def _action_to_controller(self, actions):
-        digital_buttons = np.array(np.round(actions[:9], decimals=0), dtype=np.int8).tolist()
+        digital_buttons = np.array(np.round(actions[:9], decimals=0), dtype=np.int32).tolist()
         analog_buttons = actions[9:].tolist()
 
         return digital_buttons + analog_buttons
@@ -257,15 +257,15 @@ class MeleeEnv(gym.Env):
         return max(min(nb_max, nb), nb_min)
 
     def _make_projectiles_dict(self, n_projectiles:int):
-        projectiles = {"n_active_projectiles": sp.Box(low=0, high=n_projectiles, shape=(1,), dtype=np.int8)}
+        projectiles = {"n_active_projectiles": sp.Box(low=0, high=n_projectiles, shape=(1,), dtype=np.int32)}
 
         for i in range(n_projectiles):
             projectiles_template = {f"{i}pos_x": sp.Box(low=-255.0, high=255, shape=(1,), dtype=np.float32), 
                                     f"{i}pos_y": sp.Box(low=-255.0, high=255, shape=(1,), dtype=np.float32), 
                                     f"{i}speed_x": sp.Box(low=-32768, high=32767, shape=(1,), dtype=np.float32), 
                                     f"{i}speed_y": sp.Box(low=-32768, high=32767, shape=(1,), dtype=np.float32),
-                                    f"{i}owner": sp.Box(low=-1, high=127, shape=(1,), dtype=np.int8), 
-                                    f"{i}type": sp.Box(low=0, high=512, shape=(1,), dtype=np.int16), 
+                                    f"{i}owner": sp.Box(low=-1, high=127, shape=(1,), dtype=np.int32), 
+                                    f"{i}type": sp.Box(low=0, high=512, shape=(1,), dtype=np.int32), 
                                     f"{i}frame": sp.Box(low=-16384, high=32767, shape=(1,), dtype=np.int32), 
                                     f"{i}subtype": sp.Box(low=-16384, high=65536, shape=(1,), dtype=np.int32)}
             projectiles.update(projectiles_template)
@@ -342,8 +342,8 @@ class MeleeEnv(gym.Env):
                                 f"{i}pos_y":  np.array([observsation[60 + 8*i]], dtype=np.float32), 
                                 f"{i}speed_x":  np.array([observsation[61 + 8*i]], dtype=np.float32), 
                                 f"{i}speed_y":  np.array([observsation[62 + 8*i]], dtype=np.float32),
-                                f"{i}owner":  np.array([observsation[63 + 8*i]], dtype=np.int8), 
-                                f"{i}type":  np.array([observsation[64 + 8*i]], dtype=np.int16), 
+                                f"{i}owner":  np.array([observsation[63 + 8*i]], dtype=np.int32), 
+                                f"{i}type":  np.array([observsation[64 + 8*i]], dtype=np.int32), 
                                 f"{i}frame":  np.array([observsation[65 + 8*i]], dtype=np.int32), 
                                 f"{i}subtype":  np.array([observsation[66 + 8*i]], dtype=np.int32)}
             
@@ -374,18 +374,18 @@ class MeleeEnv(gym.Env):
                     "agent": {
                         "character": game_settings[1],
                         "position": np.array([observation[2], observation[3]], dtype=np.float32),
-                        "percent": np.array([observation[6]], dtype=np.int16),
+                        "percent": np.array([observation[6]], dtype=np.int32),
                         "shield_strenght": np.array([observation[8]], dtype=np.float32),
                         "is_powershield": int(observation[10]),
-                        "stock": np.array([observation[12]], dtype=np.int8),
+                        "stock": np.array([observation[12]], dtype=np.int32),
                         "facing": int(observation[14]),
-                        "action_frame": np.array([observation[16]], dtype=np.int16),
+                        "action_frame": np.array([observation[16]], dtype=np.int32),
                         "action_id": np.array([observation[18]], dtype=np.int32),
                         "invulnerable": int(observation[20]),
-                        "invulnerability_left": np.array([observation[22]], dtype=np.int16),
-                        "hitlag_left": np.array([observation[24]], dtype=np.int16),
-                        "hitstun_left": np.array([observation[26]], dtype=np.int16),
-                        "jumps_left": np.array([observation[28]], dtype=np.int8),
+                        "invulnerability_left": np.array([observation[22]], dtype=np.int32),
+                        "hitlag_left": np.array([observation[24]], dtype=np.int32),
+                        "hitstun_left": np.array([observation[26]], dtype=np.int32),
+                        "jumps_left": np.array([observation[28]], dtype=np.int32),
                         "on_ground": int(observation[30]),
                         "speed_air_x": np.array([observation[32]], dtype=np.float32),
                         "speed_y": np.array([observation[34]], dtype=np.float32),
@@ -404,18 +404,18 @@ class MeleeEnv(gym.Env):
                     "cpu": {
                         "character": game_settings[2],
                         "position": np.array([observation[4], observation[5]], dtype=np.float32),
-                        "percent": np.array([observation[7]], dtype=np.int16),
+                        "percent": np.array([observation[7]], dtype=np.int32),
                         "shield_strenght": np.array([observation[9]], dtype=np.float32),
                         "is_powershield": int(observation[11]),
-                        "stock": np.array([observation[13]], dtype=np.int8),
+                        "stock": np.array([observation[13]], dtype=np.int32),
                         "facing": int(observation[15]),
-                        "action_frame": np.array([observation[17]], dtype=np.int16),
+                        "action_frame": np.array([observation[17]], dtype=np.int32),
                         "action_id": np.array([observation[19]], dtype=np.int32),
                         "invulnerable": int(observation[21]),
-                        "invulnerability_left": np.array([observation[23]], dtype=np.int16),
-                        "hitlag_left": np.array([observation[25]], dtype=np.int16),
-                        "hitstun_left": np.array([observation[27]], dtype=np.int16),
-                        "jumps_left": np.array([observation[29]], dtype=np.int8),
+                        "invulnerability_left": np.array([observation[23]], dtype=np.int32),
+                        "hitlag_left": np.array([observation[25]], dtype=np.int32),
+                        "hitstun_left": np.array([observation[27]], dtype=np.int32),
+                        "jumps_left": np.array([observation[29]], dtype=np.int32),
                         "on_ground": int(observation[31]),
                         "speed_air_x": np.array([observation[33]], dtype=np.float32),
                         "speed_y": np.array([observation[35]], dtype=np.float32),
@@ -604,7 +604,6 @@ class MeleeEnv(gym.Env):
         #agent_stock_penalty_modifier = self.config["reward-settings"]["agent_stock_penalty_modifier"]
         #cpu_stock_penalty_modifier = self.config["reward-settings"]["cpu_stock_penalty_modifier"]
         
-
         agent_win_reward = self.config["reward-settings"]["agent_win_reward"]
         cpu_win_reward = self.config["reward-settings"]["cpu_win_reward"]
         agent_percent_lost_penalty = self.config["reward-settings"]["agent_percent_lost_penalty"]
@@ -615,6 +614,22 @@ class MeleeEnv(gym.Env):
         action_payload_char = "iiiiiiiiiiffffff"
         controller_action = self._action_to_controller(action)
         self.last_action = controller_action
+        
+        max_distance = 3
+        if (self.last_observation["stage"]["blastzones"][0] + max_distance >= self.last_observation["agent"]["position"][0] or \
+            self.last_observation["stage"]["blastzones"][1] - max_distance <= self.last_observation["agent"]["position"][0] or \
+            self.last_observation["stage"]["blastzones"][2] - max_distance <= self.last_observation["agent"]["position"][1] or \
+            self.last_observation["stage"]["blastzones"][3] + max_distance >= self.last_observation["agent"]["position"][1] or \
+            self.last_observation["stage"]["blastzones"][0] + max_distance >= self.last_observation["cpu"]["position"][0] or \
+            self.last_observation["stage"]["blastzones"][1] - max_distance <= self.last_observation["cpu"]["position"][0] or \
+            self.last_observation["stage"]["blastzones"][2] - max_distance <= self.last_observation["cpu"]["position"][1] or \
+            self.last_observation["stage"]["blastzones"][3] + max_distance >= self.last_observation["cpu"]["position"][1]) and \
+            (self.last_observation["agent"]["stock"] == 1 or self.last_observation["agent"]["stock"] == 0 or \
+             self.last_observation["cpu"]["stock"] == 1 or self.last_observation["cpu"]["stock"] == 0) and \
+             controller_action[0] == 1 and controller_action[1] == 1:
+            
+            controller_action[0] = 0
+            controller_action[1] = 0
 
         action_payload = struct.pack(action_payload_char, 0, *controller_action)
         self.action_sock.send(action_payload)

@@ -303,7 +303,7 @@ class Melee:
             controller_state = gamestate.players[controlling_port]
 
             cursor_pos = (controller_state.cursor.x, controller_state.cursor.y)
-            wiggleroom = 1
+            wiggleroom = 0.5
 
             tilt_x, tilt_y = self._caluclate_joystick_tilt(cursor_pos, stage_target_x, stage_target_y)
             self._analog_tilt(tilt_x, tilt_y, "MAIN", controller)

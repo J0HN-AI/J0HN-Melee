@@ -408,7 +408,7 @@ def get_max_pages(logs_dict, logs_lock):
     return (len(instance_log) + max_per_page - 1) // max_per_page
 
 def make_dirs(path:str):
-    needed_dirs = ["backup", "logs"]
+    needed_dirs = ["backup", "logs", "checkpoints"]
 
     for ndir in needed_dirs:
         os.makedirs(f"{path}/{ndir}", exist_ok=True)

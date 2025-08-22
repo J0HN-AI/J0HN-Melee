@@ -18,19 +18,23 @@ data_path = "/home/jul/Desktop/TEST" #/home/jul/NetDrives/AI-Storage/J0HNMELEE
 show_instances_id_as = "IP" #IP/PORT/ID
 save_logs_every = 0.5 #seconds
 csv_logs_filename = "J0HNMelee_[ID]_[d].[mo].[y]"
-instances_filter_mode = "WHITELIST" # WHITELIST/BLACKLIST
-instances_filtered = [0] # instances id in the [instances] list
+instances_filter_mode = "BLACKLIST" # WHITELIST/BLACKLIST
+instances_filtered = [] # instances id in the [instances] list
 weights_dir_name = "J0HNMelee_[d].[mo].[y]_[h]:[mi]:[s]"
-save_weights_every = 3600 #seconds
-load_weights_on_startup = false
+save_weights_every = 60 #seconds
+load_weights_on_startup = true
 weights_to_load = "LAST" #FIRST/LAST/(name of specific weights)$
 score_history_csv_name = "SCORE_HISTORY_J0HNMelee_[d].[mo].[y]_[h]:[mi]:[s]"
+load_checkpoint_on_startup = true
+save_checkpoint_every = 3600 #seconds
+checkpoint_dir_name = "CKPT_J0HNMelee_[d].[mo].[y]_[h]:[mi]:[s]"
+checkpoint_to_load = "LAST"
 
 [training-config]
 n_epochs = 15
 batch_size = 128
 learn_steps = 2048
-n_games = 50
+n_games = 1
 n_projectiles = 5
 
 [agent]
@@ -41,13 +45,13 @@ gae = 0.95
 policy_clip = 0.2
 gradient_clip = 0.5
 
-[actor_model]
-hidden_layers = [4096, 4096, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
+[actor-model]
+hidden_layers = [4096, 4096, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
 add_LayerNorm = true
 activation = "ReLU"
  
-[critic_model]
-hidden_layers = [4096, 4096, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
+[critic-model]
+hidden_layers = [4096, 4096, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048]
 add_LayerNorm = true
 activation = "ReLU"
 
@@ -89,4 +93,4 @@ agent_character_change_rate = 10 # Changes character every x games (0 for no cha
 cpu_character_change_rate = 3 # Changes character every x games (0 for no change)
 minimum_games_berfore_changing_cpu_level = 3
 cpu_level_progression_rate = 0.6 # Changes cpu level when the AI V/D ratio is greater than this value (0 for no change)
-max_cpu_level = 1
+max_cpu_level = 9

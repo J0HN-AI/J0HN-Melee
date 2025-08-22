@@ -1,5 +1,5 @@
 [network]
-brain_ip = "172.16.1.32"
+brain_ip = "172.16.1.115"
 brain_port = 8888
 
 [dolphin]
